@@ -1687,7 +1687,7 @@ function importAuctionCSV(event) {
     const buf = e.target.result;
     let sjis='', utf8='';
     try { sjis = new TextDecoder('shift-jis').decode(buf).normalize('NFKC'); } catch(_){}
-    try { utf8 = new TextDecoder('utf-8').decode(buf).replace(/^﻿/,''); } catch(_){}
+    try { utf8 = new TextDecoder('utf-8').decode(buf).replace(/^﻿/,'').normalize('NFKC'); } catch(_){}
     let count = 0;
     // オークション会場形式（開催日ヘッダ）を優先判定。文字化けしていない方を使う
     const ahText = /開催日/.test(sjis) ? sjis : (/開催日/.test(utf8) ? utf8 : null);
