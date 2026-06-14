@@ -1,0 +1,1911 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>フォークリフト 販売価格算定</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Hiragino Sans','Meiryo','Yu Gothic',sans-serif; background:#e8edf3; min-height:100vh; display:flex; align-items:center; justify-content:center; }
+    .app { width:100%; max-width:640px; height:100vh; max-height:920px; display:flex; flex-direction:column; background:#fff; box-shadow:0 4px 40px rgba(0,0,0,.15); border-radius:16px; overflow:hidden; }
+    .header { background:linear-gradient(135deg,#1a4fc4,#2563eb); color:#fff; padding:12px 16px; display:flex; align-items:center; gap:12px; flex-shrink:0; }
+    .header-icon { font-size:24px; }
+    .header-info { flex:1; }
+    .header-title { font-size:14px; font-weight:700; }
+    .header-sub   { font-size:10px; opacity:.72; margin-top:1px; }
+    .stock-mgr-btn { padding:6px 12px; background:rgba(255,255,255,.2); color:#fff; border:1.5px solid rgba(255,255,255,.5); border-radius:8px; font-size:12px; font-family:inherit; cursor:pointer; white-space:nowrap; }
+    .stock-mgr-btn:hover { background:rgba(255,255,255,.35); }
+    .progress-wrap { flex-shrink:0; }
+    .progress-bar  { height:4px; background:#e2e8f0; }
+    .progress-fill { height:100%; background:#3b82f6; transition:width .4s; width:0%; }
+    .progress-label { text-align:right; font-size:11px; color:#94a3b8; padding:3px 16px 2px; }
+    .chat { flex:1; overflow-y:auto; padding:14px 12px; display:flex; flex-direction:column; gap:12px; scroll-behavior:smooth; }
+    .msg { display:flex; gap:8px; align-items:flex-end; max-width:90%; }
+    .msg.bot  { align-self:flex-start; }
+    .msg.user { align-self:flex-end; flex-direction:row-reverse; }
+    .avatar { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+    .bot  .avatar { background:#dbeafe; }
+    .user .avatar { background:#d1fae5; }
+    .bubble { padding:10px 13px; border-radius:18px; font-size:13.5px; line-height:1.65; word-break:break-word; }
+    .bot  .bubble { background:#f1f5f9; color:#1e293b; border-bottom-left-radius:4px; }
+    .user .bubble { background:#2563eb; color:#fff; border-bottom-right-radius:4px; }
+    .form-card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; padding:16px; width:100%; align-self:stretch; }
+    .form-section-title { font-size:11px; font-weight:700; color:#64748b; letter-spacing:.8px; padding:10px 0 6px; border-top:1px solid #e2e8f0; margin-top:12px; }
+    .form-section-title:first-child { border-top:none; margin-top:0; padding-top:0; }
+    .form-field { margin-bottom:10px; }
+    .form-field-label { font-size:12px; font-weight:600; color:#475569; margin-bottom:5px; display:flex; align-items:center; gap:5px; }
+    .req-dot { width:6px; height:6px; border-radius:50%; background:#ef4444; flex-shrink:0; }
+    .ok-dot  { width:6px; height:6px; border-radius:50%; background:#22c55e; flex-shrink:0; }
+    .form-btn-group { display:flex; flex-wrap:wrap; gap:5px; }
+    .form-btn { padding:6px 11px; border:1.5px solid #cbd5e1; border-radius:16px; background:#fff; color:#475569; font-size:12px; font-family:inherit; cursor:pointer; transition:all .13s; }
+    .form-btn:hover { border-color:#2563eb; color:#2563eb; }
+    .form-btn.selected { border-color:#2563eb; background:#2563eb; color:#fff; font-weight:600; }
+    .form-btn.sel-a { border-color:#16a34a; background:#16a34a; color:#fff; font-weight:600; }
+    .form-btn.sel-b { border-color:#d97706; background:#d97706; color:#fff; font-weight:600; }
+    .form-btn.sel-c { border-color:#dc2626; background:#dc2626; color:#fff; font-weight:600; }
+    .form-footer { display:flex; align-items:center; justify-content:space-between; margin-top:14px; padding-top:12px; border-top:1px solid #e2e8f0; }
+    .form-footer-text { font-size:12px; color:#64748b; }
+    .form-next-btn { padding:10px 22px; border-radius:10px; border:none; font-size:13px; font-weight:700; font-family:inherit; cursor:pointer; }
+    .form-next-btn.ready   { background:#2563eb; color:#fff; }
+    .form-next-btn.ready:hover { background:#1d4ed8; }
+    .form-next-btn.disabled { background:#e2e8f0; color:#94a3b8; cursor:not-allowed; }
+    .form-text-input { width:100%; padding:7px 11px; border:1.5px solid #cbd5e1; border-radius:10px; font-size:13px; font-family:inherit; outline:none; transition:border-color .15s; }
+    .form-text-input:focus { border-color:#2563eb; }
+    .optional-badge { font-size:10px; color:#94a3b8; font-weight:400; background:#f1f5f9; border-radius:4px; padding:1px 5px; margin-left:4px; }
+    .input-area { flex-shrink:0; padding:11px 12px 14px; border-top:1px solid #e2e8f0; background:#fff; }
+    .btn-group { display:flex; flex-wrap:wrap; gap:7px; }
+    .choice-btn { padding:9px 16px; border:2px solid #2563eb; border-radius:20px; background:#fff; color:#2563eb; font-size:13px; font-family:inherit; cursor:pointer; transition:all .15s; }
+    .choice-btn:hover { background:#2563eb; color:#fff; }
+    .text-row { display:flex; gap:8px; }
+    .text-input { flex:1; padding:10px 13px; border:2px solid #cbd5e1; border-radius:10px; font-size:14px; font-family:inherit; outline:none; transition:border-color .15s; }
+    .text-input:focus { border-color:#2563eb; }
+    .text-input.error { border-color:#ef4444; }
+    .go-btn { padding:10px 18px; background:#2563eb; color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; }
+    .go-btn:hover { background:#1d4ed8; }
+    .result-wrap { flex:1; min-width:0; }
+    .result-card { background:linear-gradient(135deg,#1e3a8a,#5b21b6); color:#fff; border-radius:14px; padding:18px; }
+    .price-label { font-size:11px; opacity:.72; }
+    .price-main  { font-size:34px; font-weight:800; margin:4px 0 2px; letter-spacing:-1px; }
+    .price-sub   { font-size:12px; opacity:.70; }
+    .panel { background:rgba(255,255,255,.13); border-radius:10px; padding:11px 13px; margin-top:11px; font-size:12.5px; }
+    .panel-title { font-size:11px; opacity:.68; margin-bottom:7px; font-weight:600; }
+    .p-row { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid rgba(255,255,255,.13); }
+    .p-row:last-child { border-bottom:none; }
+    .p-row.bold { font-weight:700; }
+    .p-row.emph { font-size:13.5px; font-weight:700; border-top:1px solid rgba(255,255,255,.3); margin-top:4px; padding-top:8px; }
+    .sim-row { display:flex; justify-content:space-between; align-items:flex-start; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.13); gap:8px; }
+    .sim-row:last-child { border-bottom:none; }
+    .alert { border-radius:9px; padding:9px 12px; margin-top:9px; font-size:12px; line-height:1.55; }
+    .alert-warn  { background:rgba(251,191,36,.22); border:1px solid rgba(251,191,36,.4); }
+    .alert-info  { background:rgba(96,165,250,.18); border:1px solid rgba(96,165,250,.35); }
+    .alert-error { background:rgba(239,68,68,.18);  border:1px solid rgba(239,68,68,.35); }
+    .conf-bar-wrap { margin-top:5px; height:5px; background:rgba(255,255,255,.2); border-radius:3px; }
+    .conf-bar-fill { height:100%; border-radius:3px; }
+    .ai-advice { border-left:3px solid #a78bfa !important; background:rgba(139,92,246,.18) !important; }
+    .ai-advice .panel-title { color:#c4b5fd !important; font-size:12px !important; }
+    .adv-eval { font-size:13px; line-height:1.65; margin-bottom:7px; }
+    .adv-lines { font-size:11.5px; opacity:.85; line-height:1.7; margin-bottom:8px; }
+    .adv-footer { border-top:1px solid rgba(255,255,255,.18); padding-top:8px; }
+    .adv-row { font-size:12px; color:#c4b5fd; margin-bottom:3px; }
+    .adv-row b { color:#e9d5ff; }
+    .hp-badge { display:inline-block; background:rgba(167,139,250,.35); border:1px solid #a78bfa; border-radius:4px; font-size:10px; padding:1px 5px; margin-left:4px; color:#e9d5ff; vertical-align:middle; }
+    .restart-btn { margin-top:12px; padding:9px 18px; background:rgba(255,255,255,.18); color:#fff; border:2px solid rgba(255,255,255,.45); border-radius:20px; font-size:13px; font-family:inherit; cursor:pointer; width:100%; }
+    /* 鮮度バナー */
+    .freshness-banner { background:linear-gradient(90deg,#f59e0b,#d97706); color:#fff; padding:9px 16px; font-size:12.5px; display:none; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,.3); }
+    .freshness-banner button { background:rgba(255,255,255,.25); border:1px solid rgba(255,255,255,.6); color:#fff; border-radius:12px; padding:3px 10px; font-size:11px; cursor:pointer; white-space:nowrap; }
+    /* 買取査定ボタン */
+    .kaitori-btn { background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; border:none; border-radius:18px; padding:7px 14px; font-size:12px; cursor:pointer; font-family:inherit; font-weight:600; }
+    .kaitori-btn:hover { filter:brightness(1.1); }
+    /* 買取査定結果 */
+    .kaitori-result { background:linear-gradient(135deg,rgba(245,158,11,.18),rgba(217,119,6,.1)); border:1px solid rgba(245,158,11,.4); border-radius:12px; padding:14px 16px; margin-top:12px; }
+    .kaitori-price-label { font-size:11px; opacity:.75; margin-bottom:2px; }
+    .kaitori-price-main { font-size:28px; font-weight:800; color:#fde68a; }
+    .kaitori-price-range { font-size:13px; opacity:.8; margin-top:3px; }
+    .kaitori-row { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid rgba(255,255,255,.1); font-size:12px; }
+    /* オークションタブ */
+    .auction-grade { display:inline-block; background:rgba(245,158,11,.25); border:1px solid rgba(245,158,11,.5); border-radius:4px; padding:1px 5px; font-size:10px; color:#fde68a; }
+    .restart-btn:hover { background:rgba(255,255,255,.28); }
+    .typing { display:flex; gap:5px; align-items:center; padding:10px 13px; }
+    .typing span { width:7px; height:7px; background:#94a3b8; border-radius:50%; animation:bounce 1.2s infinite; }
+    .typing span:nth-child(2) { animation-delay:.2s; }
+    .typing span:nth-child(3) { animation-delay:.4s; }
+    @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+    @media(max-width:640px){ .app{border-radius:0;max-height:100vh;} }
+
+    /* ── パスワード画面 ── */
+    #lock-screen { position:fixed; inset:0; z-index:9999; background:linear-gradient(135deg,#1a4fc4 0%,#2563eb 60%,#5b21b6 100%); display:flex; align-items:center; justify-content:center; }
+    .lock-card { background:#fff; border-radius:20px; padding:36px 32px; width:320px; max-width:90vw; box-shadow:0 8px 40px rgba(0,0,0,.25); text-align:center; }
+    .lock-icon  { font-size:40px; margin-bottom:12px; }
+    .lock-title { font-size:16px; font-weight:700; color:#1e293b; margin-bottom:4px; }
+    .lock-sub   { font-size:12px; color:#64748b; margin-bottom:22px; }
+    .lock-input { width:100%; padding:11px 14px; border:2px solid #e2e8f0; border-radius:10px; font-size:16px; font-family:inherit; outline:none; text-align:center; letter-spacing:3px; transition:border-color .15s; margin-bottom:12px; }
+    .lock-input:focus { border-color:#2563eb; }
+    .lock-input.shake { animation:shake .4s ease; border-color:#ef4444; }
+    .lock-btn   { width:100%; padding:11px; background:#2563eb; color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:700; font-family:inherit; cursor:pointer; }
+    .lock-btn:hover { background:#1d4ed8; }
+    .lock-error { font-size:12px; color:#ef4444; margin-top:10px; min-height:18px; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)} }
+
+    /* ── 在庫管理モーダル ── */
+    #stock-modal { position:fixed; inset:0; z-index:8888; background:rgba(0,0,0,.55); display:none; align-items:flex-start; justify-content:center; padding:16px; overflow-y:auto; }
+    .stock-panel { background:#fff; border-radius:16px; width:100%; max-width:720px; margin:auto; overflow:hidden; box-shadow:0 8px 40px rgba(0,0,0,.25); }
+    .stock-panel-header { background:linear-gradient(135deg,#1a4fc4,#2563eb); color:#fff; padding:14px 18px; display:flex; align-items:center; justify-content:space-between; }
+    .stock-panel-title { font-size:15px; font-weight:700; }
+    .stock-close { background:rgba(255,255,255,.2); border:none; color:#fff; width:30px; height:30px; border-radius:50%; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    .stock-tabs { display:flex; border-bottom:2px solid #e2e8f0; background:#f8fafc; }
+    .stock-tab { flex:1; padding:11px 8px; border:none; background:none; font-size:13px; font-weight:600; font-family:inherit; cursor:pointer; color:#64748b; border-bottom:3px solid transparent; margin-bottom:-2px; transition:all .15s; }
+    .stock-tab.active { color:#2563eb; border-bottom-color:#2563eb; background:#fff; }
+    .stock-tab:hover:not(.active) { background:#f1f5f9; }
+    .stock-body { padding:16px; }
+    .how-to { background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:12px 14px; margin-bottom:14px; font-size:12.5px; color:#0369a1; line-height:1.7; }
+    .how-to b { color:#0c4a6e; }
+    .how-to.green { background:#f0fdf4; border-color:#bbf7d0; color:#166534; }
+    .how-to.green b { color:#14532d; }
+    .stock-actions { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+    .act-btn { padding:8px 14px; border-radius:8px; border:none; font-size:12.5px; font-family:inherit; cursor:pointer; font-weight:600; }
+    .act-btn.green  { background:#dcfce7; color:#166534; }
+    .act-btn.blue   { background:#dbeafe; color:#1e40af; }
+    .act-btn.orange { background:#ffedd5; color:#9a3412; }
+    .act-btn:hover  { filter:brightness(.93); }
+    .stock-table-wrap { overflow-x:auto; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:14px; }
+    .stock-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .stock-table th { background:#f8fafc; padding:8px 10px; text-align:left; font-weight:600; color:#475569; border-bottom:1px solid #e2e8f0; white-space:nowrap; }
+    .stock-table td { padding:8px 10px; border-bottom:1px solid #f1f5f9; color:#1e293b; }
+    .stock-table tr:last-child td { border-bottom:none; }
+    .stock-table tr:hover td { background:#f8fafc; }
+    .del-btn { padding:3px 10px; background:#fee2e2; color:#dc2626; border:none; border-radius:6px; font-size:11px; font-family:inherit; cursor:pointer; }
+    .del-btn:hover { background:#fecaca; }
+    .add-form { border:1px solid #e2e8f0; border-radius:10px; padding:14px; background:#f8fafc; }
+    .add-form-title { font-size:13px; font-weight:700; color:#1e293b; margin-bottom:10px; }
+    .add-form-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; }
+    .add-form-field label { display:block; font-size:11px; font-weight:600; color:#64748b; margin-bottom:3px; }
+    .add-form-field input, .add-form-field select { width:100%; padding:6px 9px; border:1.5px solid #cbd5e1; border-radius:7px; font-size:13px; font-family:inherit; outline:none; }
+    .add-form-field input:focus, .add-form-field select:focus { border-color:#2563eb; }
+    .add-submit { margin-top:10px; padding:9px 22px; background:#2563eb; color:#fff; border:none; border-radius:9px; font-size:13px; font-weight:700; font-family:inherit; cursor:pointer; }
+    .add-submit:hover { background:#1d4ed8; }
+    .stock-count { font-size:12px; color:#64748b; margin-bottom:8px; }
+    .empty-msg { text-align:center; color:#94a3b8; padding:20px; font-size:13px; }
+    .market-updated { font-size:11px; color:#64748b; margin-top:6px; }
+  </style>
+</head>
+<body>
+
+<!-- パスワード画面 -->
+<div id="lock-screen">
+  <div class="lock-card">
+    <div class="lock-icon">🔒</div>
+    <div class="lock-title">フォークリフト 販売価格算定</div>
+    <div class="lock-sub">フジ自動車工業 社内専用</div>
+    <input id="lock-input" class="lock-input" type="password" placeholder="パスワード" autocomplete="current-password">
+    <button class="lock-btn" id="lock-btn">ログイン</button>
+    <div class="lock-error" id="lock-error"></div>
+  </div>
+</div>
+
+<!-- 在庫管理モーダル -->
+<div id="stock-modal">
+  <div class="stock-panel">
+    <div class="stock-panel-header">
+      <div class="stock-panel-title">📋 在庫管理</div>
+      <button class="stock-close" onclick="closeStockModal()">✕</button>
+    </div>
+    <!-- タブ切り替え -->
+    <div class="stock-tabs">
+      <button class="stock-tab active" id="tab-own-btn" onclick="switchTab('own')">🏭 自社在庫</button>
+      <button class="stock-tab" id="tab-market-btn" onclick="switchTab('market')">🌐 市場相場データ</button>
+      <button class="stock-tab" id="tab-auction-btn" onclick="switchTab('auction')">🔨 オークション相場</button>
+    </div>
+
+    <!-- 自社在庫タブ -->
+    <div id="tab-own" class="stock-body">
+      <div class="how-to">
+        <b>Excelから取り込む方法：</b><br>
+        ① 「テンプレートDL」でひな型CSVをダウンロード<br>
+        ② Excelで開いて在庫を入力・編集（売却済みは行ごと削除）<br>
+        ③ 「ファイル」→「名前を付けて保存」→ <b>CSV UTF-8</b> で保存<br>
+        ④ 「CSVを読み込む」でそのファイルを選択 → 完了！<br>
+        ※ データはこのブラウザに保存されます。<b>オフラインでも使えます。</b>
+      </div>
+      <div class="stock-actions">
+        <button class="act-btn green" onclick="downloadTemplate()">⬇ テンプレートDL</button>
+        <label class="act-btn blue" style="cursor:pointer">
+          ⬆ CSVを読み込む
+          <input type="file" accept=".csv" style="display:none" onchange="importCSV(event)">
+        </label>
+        <button class="act-btn orange" onclick="exportCSV()">💾 CSVで保存</button>
+      </div>
+      <div class="stock-count" id="stock-count"></div>
+      <div class="stock-table-wrap">
+        <table class="stock-table">
+          <thead>
+            <tr>
+              <th>No.</th><th>メーカー</th><th>型式</th>
+              <th>積載(t)</th><th>燃料</th><th>年式</th>
+              <th>アワー(h)</th><th>販売価格(円)</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="stock-tbody"></tbody>
+        </table>
+      </div>
+      <div class="add-form">
+        <div class="add-form-title">＋ 新規入庫を追加</div>
+        <div class="add-form-grid">
+          <div class="add-form-field"><label>管理番号</label><input id="af-id" placeholder="例：0026"></div>
+          <div class="add-form-field"><label>メーカー</label><input id="af-maker" placeholder="例：トヨタ"></div>
+          <div class="add-form-field"><label>型式</label><input id="af-model" placeholder="例：8FB15"></div>
+          <div class="add-form-field"><label>積載能力(t)</label><input id="af-cap" type="number" step="0.01" placeholder="例：1.50"></div>
+          <div class="add-form-field">
+            <label>燃料</label>
+            <select id="af-fuel">
+              <option value="電動">電動（バッテリー）</option>
+              <option value="エンジン">エンジン（LPG/ガソリン/ディーゼル）</option>
+            </select>
+          </div>
+          <div class="add-form-field"><label>年式(西暦)</label><input id="af-year" type="number" placeholder="例：2020"></div>
+          <div class="add-form-field"><label>アワーメーター(h)</label><input id="af-hours" type="number" placeholder="例：3000"></div>
+          <div class="add-form-field"><label>販売価格(円)</label><input id="af-price" type="number" placeholder="例：1500000"></div>
+        </div>
+        <button class="add-submit" onclick="addVehicle()">この内容で追加する</button>
+      </div>
+    </div>
+
+    <!-- 市場相場タブ -->
+    <div id="tab-market" class="stock-body" style="display:none">
+      <div class="how-to green">
+        <b>市場相場データの更新方法：</b><br>
+        ① 「テンプレートDL」でひな型CSVをダウンロード<br>
+        ② <b>Goo-net</b> などで調べた他社の販売価格をExcelに入力<br>
+        ③ 「ファイル」→「名前を付けて保存」→ <b>CSV UTF-8</b> で保存<br>
+        ④ 「CSVを読み込む」でそのファイルを選択 → 完了！<br>
+        ※ このデータは価格算定結果の「市場相場参考」欄に表示されます。
+      </div>
+      <div class="stock-actions">
+        <button class="act-btn green" onclick="downloadMarketTemplate()">⬇ テンプレートDL</button>
+        <label class="act-btn blue" style="cursor:pointer">
+          ⬆ CSVを読み込む
+          <input type="file" accept=".csv" style="display:none" onchange="importMarketCSV(event)">
+        </label>
+        <button class="act-btn orange" onclick="exportMarketCSV()">💾 CSVで保存</button>
+      </div>
+      <div class="stock-count" id="market-count"></div>
+      <div class="market-updated" id="market-updated"></div>
+      <div class="stock-table-wrap">
+        <table class="stock-table">
+          <thead>
+            <tr>
+              <th>メーカー</th><th>型式</th>
+              <th>積載(t)</th><th>燃料</th><th>年式</th>
+              <th>アワー(h)</th><th>市場価格(円)</th><th>出典</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="market-tbody"></tbody>
+        </table>
+      </div>
+      <div class="add-form">
+        <div class="add-form-title">＋ 市場データを手動追加</div>
+        <div class="add-form-grid">
+          <div class="add-form-field"><label>メーカー</label><input id="mf-maker" placeholder="例：トヨタ"></div>
+          <div class="add-form-field"><label>型式</label><input id="mf-model" placeholder="例：8FD15（不明は－）"></div>
+          <div class="add-form-field"><label>積載能力(t)</label><input id="mf-cap" type="number" step="0.01" placeholder="例：1.50"></div>
+          <div class="add-form-field">
+            <label>燃料</label>
+            <select id="mf-fuel">
+              <option value="電動">電動（バッテリー）</option>
+              <option value="エンジン">エンジン（LPG/ガソリン/ディーゼル）</option>
+            </select>
+          </div>
+          <div class="add-form-field"><label>年式(西暦)</label><input id="mf-year" type="number" placeholder="例：2020"></div>
+          <div class="add-form-field"><label>アワーメーター(h)</label><input id="mf-hours" type="number" placeholder="例：3000"></div>
+          <div class="add-form-field"><label>市場価格(円)</label><input id="mf-price" type="number" placeholder="例：1500000"></div>
+          <div class="add-form-field"><label>出典</label><input id="mf-source" placeholder="例：Goo-net"></div>
+        </div>
+        <button class="add-submit" onclick="addMarketVehicle()">追加する</button>
+      </div>
+    </div>
+
+    <!-- オークション相場タブ -->
+    <div id="tab-auction" class="stock-body" style="display:none">
+      <div class="how-to" style="background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.35)">
+        <b>オークション落札データの取込方法：</b><br>
+        ① 「テンプレートDL」でひな型CSVをダウンロード<br>
+        ② オークション結果（USS/TAA/NAA等）のデータをコピー＆ペーストして入力<br>
+        ③ 「ファイル」→「名前を付けて保存」→ <b>CSV UTF-8</b> で保存<br>
+        ④ 「CSVを読み込む」でそのファイルを選択 → 完了！<br>
+        ※ 直近1年分を登録すると買取査定の精度が上がります。
+      </div>
+      <div class="stock-actions">
+        <button class="act-btn green" onclick="downloadAuctionTemplate()">⬇ テンプレートDL</button>
+        <label class="act-btn blue" style="cursor:pointer">
+          ⬆ CSVを読み込む
+          <input type="file" accept=".csv" style="display:none" onchange="importAuctionCSV(event)">
+        </label>
+        <button class="act-btn orange" onclick="exportAuctionCSV()">💾 CSVで保存</button>
+      </div>
+      <div class="stock-count" id="auction-count"></div>
+      <div class="market-updated" id="auction-updated"></div>
+      <div class="stock-table-wrap">
+        <table class="stock-table">
+          <thead>
+            <tr>
+              <th>メーカー</th><th>型式</th>
+              <th>積載(t)</th><th>燃料</th><th>年式</th>
+              <th>アワー(h)</th><th>落札価格(円)</th><th>グレード</th><th>落札日</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="auction-tbody"></tbody>
+        </table>
+      </div>
+      <div class="add-form">
+        <div class="add-form-title">＋ 落札データを手動追加</div>
+        <div class="add-form-grid">
+          <div class="add-form-field"><label>メーカー</label><input id="auc-maker" placeholder="例：トヨタ"></div>
+          <div class="add-form-field"><label>型式</label><input id="auc-model" placeholder="例：8FB15"></div>
+          <div class="add-form-field"><label>積載能力(t)</label><input id="auc-cap" type="number" step="0.01" placeholder="例：1.50"></div>
+          <div class="add-form-field">
+            <label>燃料</label>
+            <select id="auc-fuel">
+              <option value="電動">電動（バッテリー）</option>
+              <option value="エンジン">エンジン（LPG/ガソリン/ディーゼル）</option>
+            </select>
+          </div>
+          <div class="add-form-field"><label>年式(西暦)</label><input id="auc-year" type="number" placeholder="例：2020"></div>
+          <div class="add-form-field"><label>アワーメーター(h)</label><input id="auc-hours" type="number" placeholder="例：3000"></div>
+          <div class="add-form-field"><label>落札価格(円)</label><input id="auc-price" type="number" placeholder="例：700000"></div>
+          <div class="add-form-field"><label>グレード</label><input id="auc-grade" placeholder="例：B or 3.5"></div>
+          <div class="add-form-field"><label>落札日</label><input id="auc-date" type="date"></div>
+        </div>
+        <button class="add-submit" onclick="addAuctionVehicle()">追加する</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- メインアプリ -->
+<div class="app" id="main-app" style="display:none">
+  <!-- データ鮮度バナー -->
+  <div class="freshness-banner" id="freshness-banner">
+    <span>⚠️ 市場データの更新時期です（<span id="freshness-msg"></span>）</span>
+    <button onclick="document.getElementById('freshness-banner').style.display='none';openStockModal()">今すぐ確認</button>
+    <button onclick="document.getElementById('freshness-banner').style.display='none'">後で</button>
+  </div>
+  <div class="header">
+    <div class="header-icon">🏭</div>
+    <div class="header-info">
+      <div class="header-title" id="app-mode-title">フォークリフト 販売価格算定</div>
+      <div class="header-sub">フジ自動車工業 ／ 自社在庫＋市場相場連動版</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="kaitori-btn" id="kaitori-toggle" onclick="toggleKaitoriMode()">🔨 買取査定</button>
+      <button class="stock-mgr-btn" onclick="openStockModal()">📋 在庫管理</button>
+    </div>
+  </div>
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-label" id="progressLabel"></div>
+  </div>
+  <div class="chat" id="chat"></div>
+  <div class="input-area" id="inputArea" style="display:none"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// ★ パスワード ── 変更する場合はここだけ編集してください ★
+// ══════════════════════════════════════════════════════════
+const APP_PASSWORD = 'fuji2024';
+
+// ══════════════════════════════════════════════════════════
+// 初期在庫データ（localStorageに何もない初回のみ使用）
+// ══════════════════════════════════════════════════════════
+const DEFAULT_STOCK = [
+  { id:'0003', maker:'トヨタ',       model:'7FBR15',   cap:1.50, fuel:'電動',    year:2015, hours:14746, price:480000  },
+  { id:'0005', maker:'三菱',         model:'KFDE25T',  cap:2.10, fuel:'エンジン', year:2019, hours:5484,  price:2000000 },
+  { id:'0008', maker:'トヨタ',       model:'02-8FD15', cap:1.50, fuel:'エンジン', year:2020, hours:4949,  price:1650000 },
+  { id:'0009', maker:'トヨタ',       model:'7FBR15',   cap:1.45, fuel:'電動',    year:2015, hours:10329, price:550000  },
+  { id:'0012', maker:'ユニキャリア', model:'FD25T5M',  cap:2.20, fuel:'エンジン', year:2020, hours:3053,  price:2150000 },
+  { id:'0013', maker:'BYD',          model:'ECB25D',   cap:2.20, fuel:'電動',    year:2024, hours:533,   price:3900000 },
+  { id:'0017', maker:'トヨタ',       model:'7FBR15',   cap:1.50, fuel:'電動',    year:2016, hours:11283, price:480000  },
+  { id:'0022', maker:'ニチユ',       model:'FB20PLN',  cap:1.37, fuel:'電動',    year:2015, hours:3603,  price:1350000 },
+  { id:'0024', maker:'トヨタ',       model:'8FB15',    cap:1.50, fuel:'電動',    year:2017, hours:5391,  price:1400000 },
+  { id:'0025', maker:'トヨタ',       model:'7FBR10',   cap:1.00, fuel:'電動',    year:2016, hours:7338,  price:480000  },
+];
+
+// ══════════════════════════════════════════════════════════
+// 初期市場相場データ（Goo-net・PCS・自社HP・LiftNeeds・アルプロス：2026年6月時点）
+// 合計526件：PCS 223件 / Goo-net 160件 / 自社HP 78件 / LiftNeeds 57件 / アルプロス 8件
+// ══════════════════════════════════════════════════════════
+const DEFAULT_MARKET = [
+  // Goo-net（2026年6月）
+  { maker:'トヨタ',           model:'-',                      cap:1.0, fuel:'エンジン', year:2015, hours:7464, price:746000,  source:'Goo-net' },
+  { maker:'トヨタ',           model:'-',                      cap:1.0, fuel:'エンジン', year:2006, hours:4900, price:730000,  source:'Goo-net' },
+  { maker:'トヨタ',           model:'-',                      cap:1.5, fuel:'エンジン', year:2007, hours:2520, price:1164000, source:'Goo-net' },
+  { maker:'トヨタ',           model:'-',                      cap:1.5, fuel:'エンジン', year:2026, hours:500,  price:2350000, source:'Goo-net' },
+  { maker:'住友',             model:'-',                      cap:2.0, fuel:'エンジン', year:2010, hours:7469, price:801000,  source:'Goo-net' },
+  { maker:'コマツ',           model:'FD20C-17',               cap:2.0, fuel:'エンジン', year:2015, hours:5000, price:2618000, source:'Goo-net' },
+  { maker:'トヨタ',           model:'02-8FDL25',              cap:2.5, fuel:'エンジン', year:2019, hours:8000, price:2145000, source:'Goo-net' },
+  { maker:'トヨタ',           model:'-',                      cap:2.5, fuel:'エンジン', year:2014, hours:5000, price:1180000, source:'Goo-net' },
+  { maker:'トヨタ',           model:'-',                      cap:2.5, fuel:'エンジン', year:2022, hours:8627, price:2143000, source:'Goo-net' },
+  { maker:'ユニキャリア',     model:'-',                      cap:3.0, fuel:'電動',    year:2016, hours:1836, price:1384000, source:'Goo-net' },
+  { maker:'トヨタ',           model:'52-8FD30',               cap:3.0, fuel:'エンジン', year:2014, hours:4400, price:2640000, source:'Goo-net' },
+  { maker:'ユニキャリア',     model:'-',                      cap:3.5, fuel:'エンジン', year:2019, hours:5614, price:1824000, source:'Goo-net' },
+  { maker:'三菱',             model:'-',                      cap:3.5, fuel:'エンジン', year:2023, hours:436,  price:3034000, source:'Goo-net' },
+  { maker:'トヨタ',           model:'-',                      cap:4.0, fuel:'エンジン', year:2015, hours:3428, price:2080000, source:'Goo-net' },
+  // Goo-net p.1（追加分）
+  { maker:'トヨタ',     model:'02-8FDL25', cap:2.0,  fuel:'エンジン', year:2022, hours:1197,  price:3246000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-',         cap:2.5,  fuel:'エンジン', year:2014, hours:2808,  price:1180000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'7FBR15',    cap:1.3,  fuel:'電動',    year:2016, hours:9851,  price:606000,  source:'Goo-net' },
+  { maker:'トヨタ',     model:'7FBR15',    cap:1.5,  fuel:'電動',    year:2016, hours:10712, price:529000,  source:'Goo-net' },
+  { maker:'トヨタ',     model:'8FBRS15',   cap:1.5,  fuel:'電動',    year:2019, hours:9890,  price:749000,  source:'Goo-net' },
+  { maker:'トヨタ',     model:'7FBR15',    cap:1.5,  fuel:'電動',    year:2015, hours:8793,  price:529000,  source:'Goo-net' },
+  { maker:'トヨタ',     model:'07FBR15',   cap:1.5,  fuel:'電動',    year:2015, hours:11156, price:540000,  source:'Goo-net' },
+  { maker:'コマツ',     model:'FD20T-17',  cap:1.45, fuel:'エンジン', year:2011, hours:4099,  price:1541000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'7FBR15',    cap:1.5,  fuel:'電動',    year:2016, hours:11020, price:529000,  source:'Goo-net' },
+  { maker:'トヨタ',     model:'7FBR10',    cap:1.0,  fuel:'電動',    year:2017, hours:5625,  price:606000,  source:'Goo-net' },
+  { maker:'トヨタ',     model:'7FBR10',    cap:1.0,  fuel:'電動',    year:2016, hours:7333,  price:529000,  source:'Goo-net' },
+  { maker:'トヨタ',     model:'7FBR15',    cap:1.5,  fuel:'電動',    year:2017, hours:10212, price:529000,  source:'Goo-net' },
+  { maker:'トヨタ',     model:'7FBR15',    cap:1.5,  fuel:'電動',    year:2015, hours:14030, price:529000,  source:'Goo-net' },
+  { maker:'トヨタ',     model:'8FBR15',    cap:1.5,  fuel:'電動',    year:2020, hours:5520,  price:1024000, source:'Goo-net' },
+  // Goo-net p.2
+  { maker:'ユニキャリア', model:'FB15-8',        cap:1.4,  fuel:'電動',    year:2019, hours:3000,  price:1321000, source:'Goo-net' },
+  { maker:'三菱',        model:'KFDE25T',        cap:2.1,  fuel:'エンジン', year:2019, hours:5101,  price:2201000, source:'Goo-net' },
+  { maker:'トヨタ',      model:'7FBR15',         cap:1.45, fuel:'電動',    year:2015, hours:9582,  price:606000,  source:'Goo-net' },
+  { maker:'トヨタ',      model:'7FBRS15',        cap:1.1,  fuel:'電動',    year:2017, hours:8829,  price:749000,  source:'Goo-net' },
+  { maker:'トヨタ',      model:'7FBR15',         cap:1.5,  fuel:'電動',    year:2015, hours:6680,  price:529000,  source:'Goo-net' },
+  { maker:'トヨタ',      model:'7FBR15',         cap:1.5,  fuel:'電動',    year:2015, hours:12136, price:606000,  source:'Goo-net' },
+  { maker:'トヨタ',      model:'7FBR15',         cap:1.5,  fuel:'電動',    year:2015, hours:10700, price:672000,  source:'Goo-net' },
+  { maker:'トヨタ',      model:'8FBR15',         cap:1.5,  fuel:'電動',    year:2018, hours:11600, price:826000,  source:'Goo-net' },
+  { maker:'トヨタ',      model:'7FBR15',         cap:1.5,  fuel:'電動',    year:2015, hours:8897,  price:606000,  source:'Goo-net' },
+  { maker:'トヨタ',      model:'7FBR15',         cap:1.35, fuel:'電動',    year:2017, hours:6206,  price:727000,  source:'Goo-net' },
+  { maker:'トヨタ',      model:'7FBR18',         cap:1.8,  fuel:'電動',    year:2016, hours:5922,  price:716000,  source:'Goo-net' },
+  { maker:'三菱',        model:'FDE35AP-T',      cap:2.85, fuel:'エンジン', year:2023, hours:112,   price:3279000, source:'Goo-net' },
+  { maker:'トヨタ',      model:'02-8FD30',       cap:2.49, fuel:'エンジン', year:2019, hours:8000,  price:2146000, source:'Goo-net' },
+  { maker:'ニチユ',      model:'FB20PLN-77-300', cap:1.37, fuel:'電動',    year:2015, hours:3572,  price:1486000, source:'Goo-net' },
+  { maker:'トヨタ',      model:'7FGL15',         cap:1.5,  fuel:'エンジン', year:1998, hours:7900,  price:595000,  source:'Goo-net' },
+  { maker:'トヨタ',      model:'3FB9',           cap:0.9,  fuel:'電動',    year:2017, hours:6558,  price:661000,  source:'Goo-net' },
+  { maker:'トヨタ',      model:'02-8FD15',       cap:1.5,  fuel:'エンジン', year:2020, hours:4921,  price:1816000, source:'Goo-net' },
+  { maker:'ユニキャリア', model:'FHD25T5',       cap:2.5,  fuel:'エンジン', year:2017, hours:2537,  price:2000000, source:'Goo-net' },
+  { maker:'ニチユ',      model:'FB25P-80-3F430SF', cap:2.4, fuel:'電動',   year:2023, hours:1300,  price:2201000, source:'Goo-net' },
+  { maker:'三菱',        model:'FD15T14',        cap:1.5,  fuel:'エンジン', year:2022, hours:1540,  price:1541000, source:'Goo-net' },
+  { maker:'三菱',        model:'FGE25T',         cap:2.45, fuel:'エンジン', year:2018, hours:7456,  price:1706000, source:'Goo-net' },
+  { maker:'三菱',        model:'KFDE25T',        cap:2.1,  fuel:'エンジン', year:2021, hours:4274,  price:2201000, source:'Goo-net' },
+  { maker:'日産',        model:'EBT-NP1F1',      cap:1.5,  fuel:'エンジン', year:2008, hours:1187,  price:1046000, source:'Goo-net' },
+  { maker:'ユニキャリア', model:'FD25T5M',       cap:2.2,  fuel:'エンジン', year:2020, hours:2553,  price:2366000, source:'Goo-net' },
+  { maker:'三菱',        model:'FGE25P-T',       cap:2.4,  fuel:'エンジン', year:2023, hours:658,   price:2641000, source:'Goo-net' },
+  // Goo-net p.3
+  { maker:'トヨタ', model:'02-8FD20',  cap:1.25, fuel:'エンジン', year:2019, hours:1500, price:2146000, source:'Goo-net' },
+  { maker:'トヨタ', model:'7FBR15',    cap:1.5,  fuel:'電動',    year:2013, hours:8356, price:540000,  source:'Goo-net' },
+  { maker:'トヨタ', model:'02-8FD25',  cap:2.3,  fuel:'エンジン', year:2020, hours:3344, price:2421000, source:'Goo-net' },
+  { maker:'三菱',   model:'FD15T14',   cap:1.5,  fuel:'エンジン', year:2022, hours:656,  price:1541000, source:'Goo-net' },
+  { maker:'三菱',   model:'FDE25P-T',  cap:2.35, fuel:'エンジン', year:2022, hours:2440, price:2421000, source:'Goo-net' },
+  { maker:'三菱',   model:'KFDE25T',   cap:2.1,  fuel:'エンジン', year:2022, hours:1136, price:2421000, source:'Goo-net' },
+  { maker:'トヨタ', model:'02-8FG25',  cap:2.5,  fuel:'エンジン', year:2019, hours:9700, price:2091000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FB15',     cap:1.5,  fuel:'電動',    year:2017, hours:6231, price:1376000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FB15',     cap:1.5,  fuel:'電動',    year:2017, hours:5382, price:1541000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FB25',     cap:2.05, fuel:'電動',    year:2020, hours:3359, price:2751000, source:'Goo-net' },
+  { maker:'三菱',   model:'FDE25T',    cap:2.3,  fuel:'エンジン', year:2021, hours:2191, price:2091000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FB15',     cap:1.5,  fuel:'電動',    year:2019, hours:1908, price:1849000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FBR15',    cap:1.45, fuel:'電動',    year:2021, hours:3279, price:1486000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FB15',     cap:1.4,  fuel:'電動',    year:2021, hours:1800, price:2201000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FBR15',    cap:1.5,  fuel:'電動',    year:2022, hours:1656, price:1266000, source:'Goo-net' },
+  { maker:'トヨタ', model:'02-8FG15',  cap:1.5,  fuel:'エンジン', year:2018, hours:8157, price:1651000, source:'Goo-net' },
+  // Goo-net p.4
+  { maker:'トヨタ', model:'8FBL15',    cap:1.5,  fuel:'電動',    year:2022, hours:4000, price:1981000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FB15',     cap:1.5,  fuel:'電動',    year:2018, hours:6561, price:1486000, source:'Goo-net' },
+  { maker:'トヨタ', model:'52-8FD30',  cap:2.2,  fuel:'エンジン', year:2014, hours:2300, price:2905000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FBE15',    cap:1.5,  fuel:'電動',    year:2018, hours:4862, price:1431000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FGL15',    cap:1.5,  fuel:'エンジン', year:2018, hours:1270, price:1651000, source:'Goo-net' },
+  { maker:'トヨタ', model:'02-8FG25',  cap:2.5,  fuel:'エンジン', year:2019, hours:4500, price:2421000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FB15',     cap:1.4,  fuel:'電動',    year:2018, hours:3747, price:1651000, source:'Goo-net' },
+  { maker:'トヨタ', model:'02-8FG25',  cap:2.5,  fuel:'エンジン', year:2009, hours:8490, price:1871000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FB25',     cap:2.0,  fuel:'電動',    year:2017, hours:4995, price:2421000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FG40',     cap:3.15, fuel:'エンジン', year:2019, hours:5430, price:3851000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FB25',     cap:2.1,  fuel:'電動',    year:2018, hours:4670, price:2080000, source:'Goo-net' },
+  { maker:'トヨタ', model:'8FBL15',    cap:1.5,  fuel:'電動',    year:2022, hours:1416, price:2036000, source:'Goo-net' },
+  { maker:'トヨタ', model:'7FD35',     cap:3.5,  fuel:'エンジン', year:2003, hours:8400, price:2146000, source:'Goo-net' },
+  // Goo-net p.5
+  { maker:'トヨタ',     model:'-', cap:3.5, fuel:'エンジン', year:2020, hours:7498,  price:3279000, source:'Goo-net' },
+  { maker:'TCM',        model:'-', cap:3.5, fuel:'エンジン', year:2020, hours:8217,  price:2365000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:2.5, fuel:'エンジン', year:2011, hours:3150,  price:1428000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:3.0, fuel:'エンジン', year:2020, hours:6566,  price:2418000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:3.5, fuel:'エンジン', year:2020, hours:5284,  price:2704000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:3.0, fuel:'エンジン', year:2020, hours:3413,  price:2374000, source:'Goo-net' },
+  { maker:'ニチユ',     model:'-', cap:1.5, fuel:'電動',    year:2021, hours:1841,  price:746000,  source:'Goo-net' },
+  { maker:'住友',       model:'-', cap:1.5, fuel:'電動',    year:2020, hours:7900,  price:823000,  source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:1.5, fuel:'エンジン', year:2019, hours:8526,  price:1384000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:1.0, fuel:'エンジン', year:2009, hours:810,   price:1208000, source:'Goo-net' },
+  { maker:'三菱',       model:'-', cap:2.0, fuel:'エンジン', year:2020, hours:247,   price:1824000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:2.5, fuel:'エンジン', year:2006, hours:8053,  price:1408000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:2.5, fuel:'電動',    year:2015, hours:2585,  price:1417000, source:'Goo-net' },
+  { maker:'コマツ',     model:'-', cap:1.0, fuel:'エンジン', year:2005, hours:2198,  price:1494000, source:'Goo-net' },
+  { maker:'コマツ',     model:'-', cap:1.5, fuel:'エンジン', year:2005, hours:2394,  price:867000,  source:'Goo-net' },
+  { maker:'三菱',       model:'-', cap:2.5, fuel:'エンジン', year:2020, hours:5385,  price:1824000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:2.0, fuel:'電動',    year:2019, hours:139,   price:1409000, source:'Goo-net' },
+  { maker:'コマツ',     model:'-', cap:2.5, fuel:'エンジン', year:2015, hours:3363,  price:1439000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:3.5, fuel:'エンジン', year:2012, hours:5350,  price:2814000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:4.0, fuel:'エンジン', year:2017, hours:6719,  price:2704000, source:'Goo-net' },
+  { maker:'三菱',       model:'-', cap:1.5, fuel:'エンジン', year:2020, hours:3196,  price:856000,  source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:1.5, fuel:'エンジン', year:2015, hours:784,   price:1318000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:3.0, fuel:'エンジン', year:2017, hours:3003,  price:3188000, source:'Goo-net' },
+  // Goo-net p.6
+  { maker:'TCM',        model:'-', cap:3.5, fuel:'エンジン', year:2011, hours:6110,  price:2924000, source:'Goo-net' },
+  { maker:'ユニキャリア', model:'-', cap:2.5, fuel:'エンジン', year:2019, hours:4898, price:1868000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:3.0, fuel:'エンジン', year:2017, hours:3600,  price:1923000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:2.0, fuel:'エンジン', year:2016, hours:1984,  price:1747000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:1.0, fuel:'エンジン', year:2016, hours:1293,  price:878000,  source:'Goo-net' },
+  { maker:'三菱',       model:'-', cap:1.5, fuel:'エンジン', year:2015, hours:3758,  price:768000,  source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:2.5, fuel:'エンジン', year:2016, hours:8381,  price:2088000, source:'Goo-net' },
+  { maker:'ユニキャリア', model:'-', cap:1.5, fuel:'エンジン', year:2021, hours:3835, price:1340000, source:'Goo-net' },
+  { maker:'コマツ',     model:'-', cap:1.0, fuel:'エンジン', year:2013, hours:541,   price:988000,  source:'Goo-net' },
+  { maker:'三菱',       model:'-', cap:3.5, fuel:'エンジン', year:2023, hours:194,   price:2924000, source:'Goo-net' },
+  { maker:'三菱',       model:'-', cap:3.0, fuel:'エンジン', year:2018, hours:7012,  price:1164000, source:'Goo-net' },
+  { maker:'コマツ',     model:'-', cap:2.0, fuel:'エンジン', year:2002, hours:10908, price:988000,  source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:1.0, fuel:'エンジン', year:2019, hours:5984,  price:1098000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:2.0, fuel:'電動',    year:2015, hours:7273,  price:878000,  source:'Goo-net' },
+  { maker:'TCM',        model:'-', cap:4.0, fuel:'エンジン', year:2011, hours:7355,  price:3144000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:2.0, fuel:'エンジン', year:2013, hours:8098,  price:1010000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:2.0, fuel:'エンジン', year:2007, hours:3179,  price:1604000, source:'Goo-net' },
+  { maker:'ニチユ',     model:'-', cap:1.5, fuel:'電動',    year:2021, hours:7287,  price:1164000, source:'Goo-net' },
+  { maker:'ユニキャリア', model:'-', cap:2.5, fuel:'エンジン', year:2018, hours:1107, price:2088000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:3.5, fuel:'エンジン', year:2020, hours:4265,  price:2594000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:1.8, fuel:'エンジン', year:2018, hours:614,   price:1934000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:2.5, fuel:'エンジン', year:2018, hours:1970,  price:2484000, source:'Goo-net' },
+  { maker:'トヨタ',     model:'-', cap:3.0, fuel:'エンジン', year:2017, hours:2153,  price:1923000, source:'Goo-net' },
+  // Goo-net p.7
+  { maker:'三菱',   model:'-', cap:1.5, fuel:'エンジン', year:2022, hours:6943,  price:1164000, source:'Goo-net' },
+  { maker:'三菱',   model:'-', cap:2.0, fuel:'エンジン', year:2016, hours:4818,  price:1824000, source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:2.0, fuel:'エンジン', year:2021, hours:3472,  price:1648000, source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:4.5, fuel:'エンジン', year:2018, hours:3688,  price:3254000, source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:2.5, fuel:'エンジン', year:2016, hours:512,   price:2374000, source:'Goo-net' },
+  { maker:'三菱',   model:'-', cap:1.5, fuel:'エンジン', year:2018, hours:1710,  price:856000,  source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:1.5, fuel:'エンジン', year:2018, hours:697,   price:1604000, source:'Goo-net' },
+  { maker:'三菱',   model:'-', cap:3.0, fuel:'エンジン', year:2025, hours:72,    price:3914000, source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:1.5, fuel:'エンジン', year:2008, hours:8221,  price:878000,  source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:1.5, fuel:'エンジン', year:2013, hours:2178,  price:1934000, source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:3.0, fuel:'エンジン', year:2021, hours:3630,  price:1868000, source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:3.5, fuel:'電動',    year:2013, hours:7337,  price:1868000, source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:2.5, fuel:'エンジン', year:2014, hours:4962,  price:2638000, source:'Goo-net' },
+  { maker:'三菱',   model:'-', cap:2.5, fuel:'エンジン', year:2007, hours:7050,  price:1758000, source:'Goo-net' },
+  { maker:'日産',   model:'-', cap:2.5, fuel:'エンジン', year:2006, hours:5668,  price:834000,  source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:2.5, fuel:'エンジン', year:2015, hours:10645, price:2044000, source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:3.5, fuel:'エンジン', year:2018, hours:8961,  price:2069000, source:'Goo-net' },
+  { maker:'三菱',   model:'-', cap:2.5, fuel:'エンジン', year:2021, hours:2567,  price:2814000, source:'Goo-net' },
+  { maker:'三菱',   model:'-', cap:2.5, fuel:'エンジン', year:2024, hours:40,    price:3685000, source:'Goo-net' },
+  { maker:'三菱',   model:'-', cap:2.5, fuel:'エンジン', year:2024, hours:65,    price:3795000, source:'Goo-net' },
+  { maker:'三菱',   model:'-', cap:2.5, fuel:'エンジン', year:2024, hours:64,    price:3795000, source:'Goo-net' },
+  { maker:'三菱',   model:'-', cap:2.5, fuel:'エンジン', year:2024, hours:67,    price:3795000, source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:1.5, fuel:'エンジン', year:2017, hours:294,   price:1758000, source:'Goo-net' },
+  { maker:'三菱',   model:'-', cap:2.5, fuel:'エンジン', year:2024, hours:139,   price:3685000, source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:5.0, fuel:'エンジン', year:2006, hours:5662,  price:4379000, source:'Goo-net' },
+  { maker:'コマツ', model:'-', cap:5.0, fuel:'エンジン', year:2002, hours:958,   price:4950000, source:'Goo-net' },
+  // Goo-net p.8
+  { maker:'ニチユ', model:'-', cap:1.5, fuel:'電動',    year:2015, hours:7992,  price:990000,  source:'Goo-net' },
+  { maker:'トヨタ', model:'-', cap:4.0, fuel:'エンジン', year:2017, hours:3969,  price:4024000, source:'Goo-net' },
+  { maker:'三菱',   model:'-', cap:3.5, fuel:'エンジン', year:2014, hours:1639,  price:2704000, source:'Goo-net' },
+  { maker:'三菱',   model:'-', cap:2.5, fuel:'エンジン', year:2022, hours:1497,  price:2198000, source:'Goo-net' },
+  { maker:'三菱',   model:'-', cap:2.5, fuel:'エンジン', year:2015, hours:9741,  price:1714000, source:'Goo-net' },
+  { maker:'コマツ', model:'-', cap:2.5, fuel:'エンジン', year:2003, hours:5157,  price:1780000, source:'Goo-net' },
+  // PCS p.1（2026年6月）
+  { maker:'三菱',             model:'FGE10T EBT-F34G',        cap:1.0, fuel:'エンジン', year:2016, hours:448,  price:1640000, source:'PCS' },
+  { maker:'トヨタ',           model:'8FBR15',                 cap:1.5, fuel:'電動',    year:2021, hours:4061, price:1350000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FDE20T',               cap:2.0, fuel:'エンジン', year:2020, hours:663,  price:2250000, source:'PCS' },
+  { maker:'トヨタ',           model:'02-8FD30',               cap:3.0, fuel:'エンジン', year:2021, hours:3103, price:3100000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FDE20T YDM-F18D',      cap:2.0, fuel:'エンジン', year:2021, hours:4034, price:2250000, source:'PCS' },
+  { maker:'住友ナコ',         model:'11FD25PAXI98D KDN-D2L',  cap:2.5, fuel:'エンジン', year:2012, hours:1135, price:2300000, source:'PCS' },
+  { maker:'トヨタ',           model:'02-8FD25',               cap:2.5, fuel:'エンジン', year:2019, hours:2418, price:2540000, source:'PCS' },
+  { maker:'トヨタ',           model:'7FBR13',                 cap:1.3, fuel:'電動',    year:2013, hours:2460, price:1300000, source:'PCS' },
+  { maker:'コマツ',           model:'FD25C-17',               cap:2.5, fuel:'エンジン', year:2015, hours:2966, price:2500000, source:'PCS' },
+  { maker:'トヨタ',           model:'8FBR15',                 cap:1.5, fuel:'電動',    year:2021, hours:1098, price:1350000, source:'PCS' },
+  // PCS p.2
+  { maker:'トヨタ',           model:'8FBL10',                 cap:1.0, fuel:'電動',    year:2021, hours:7900, price:1300000, source:'PCS' },
+  { maker:'トヨタ',           model:'8FBR15',                 cap:1.5, fuel:'電動',    year:2021, hours:4181, price:1350000, source:'PCS' },
+  { maker:'トヨタ',           model:'8FBR15',                 cap:1.5, fuel:'電動',    year:2022, hours:8528, price:1300000, source:'PCS' },
+  { maker:'コマツ',           model:'FG15T-21',               cap:1.5, fuel:'エンジン', year:2024, hours:4,    price:1980000, source:'PCS' },
+  { maker:'住友ナコ',         model:'13FG30PAXIII25S',        cap:3.0, fuel:'エンジン', year:2019, hours:828,  price:2700000, source:'PCS' },
+  { maker:'トヨタ',           model:'8FBR15',                 cap:1.5, fuel:'電動',    year:2021, hours:5446, price:1350000, source:'PCS' },
+  { maker:'三菱',             model:'FG45NT',                 cap:4.5, fuel:'エンジン', year:2017, hours:605,  price:3800000, source:'PCS' },
+  { maker:'トヨタ',           model:'8FBR15',                 cap:1.5, fuel:'電動',    year:2024, hours:4130, price:1500000, source:'PCS' },
+  { maker:'トヨタ',           model:'02-8FGL15',              cap:1.5, fuel:'エンジン', year:2007, hours:661,  price:1550000, source:'PCS' },
+  { maker:'三菱',             model:'FD20T',                  cap:2.0, fuel:'エンジン', year:2007, hours:5472, price:1730000, source:'PCS' },
+  // PCS p.3
+  { maker:'トヨタ',           model:'02-8FD20',               cap:2.0, fuel:'エンジン', year:2019, hours:3360, price:2240000, source:'PCS' },
+  { maker:'三菱',             model:'FDE25T YDM-F18D',        cap:2.5, fuel:'エンジン', year:2017, hours:127,  price:2500000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FD25T15M YDM-F199',    cap:2.5, fuel:'エンジン', year:2021, hours:375,  price:2450000, source:'PCS' },
+  { maker:'日産',             model:'APL02A25J',              cap:2.5, fuel:'エンジン', year:2005, hours:945,  price:1750000, source:'PCS' },
+  { maker:'トヨタ',           model:'8FG20',                  cap:2.0, fuel:'エンジン', year:2008, hours:4636, price:1800000, source:'PCS' },
+  { maker:'トヨタ',           model:'8FBR18',                 cap:1.8, fuel:'電動',    year:2021, hours:2770, price:1380000, source:'PCS' },
+  { maker:'トヨタ',           model:'02-8FDL30',              cap:3.0, fuel:'エンジン', year:2015, hours:111,  price:2600000, source:'PCS' },
+  { maker:'トヨタ',           model:'02-8FD25',               cap:2.5, fuel:'エンジン', year:2020, hours:2746, price:2900000, source:'PCS' },
+  // PCS p.4
+  { maker:'トヨタ',           model:'02-8FGL25',              cap:2.5, fuel:'エンジン', year:2018, hours:1016, price:2300000, source:'PCS' },
+  { maker:'住友ナコ',         model:'11FD20PAXIII24D',        cap:2.0, fuel:'エンジン', year:2017, hours:6255, price:2100000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FDE25P-T',             cap:2.5, fuel:'エンジン', year:2023, hours:695,  price:2950000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FB25PN-77-470MSF',     cap:2.5, fuel:'電動',    year:2017, hours:6009, price:1600000, source:'PCS' },
+  { maker:'住友ナコ',         model:'03FT15PAX321D',          cap:1.5, fuel:'エンジン', year:2022, hours:4460, price:1450000, source:'PCS' },
+  { maker:'住友ナコ',         model:'03FG18PAX321D',          cap:1.8, fuel:'エンジン', year:2020, hours:3367, price:1550000, source:'PCS' },
+  { maker:'トヨタ',           model:'8FG20',                  cap:2.0, fuel:'エンジン', year:2018, hours:6972, price:1800000, source:'PCS' },
+  { maker:'トヨタ',           model:'7FB25',                  cap:2.5, fuel:'電動',    year:2013, hours:4624, price:2600000, source:'PCS' },
+  { maker:'トヨタ',           model:'8FB25',                  cap:2.5, fuel:'電動',    year:2021, hours:1341, price:2500000, source:'PCS' },
+  { maker:'トヨタ',           model:'8FBR15',                 cap:1.5, fuel:'電動',    year:2021, hours:6697, price:1350000, source:'PCS' },
+  // PCS p.5
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2021, hours:5931, price:1320000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2021, hours:6571, price:1320000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2021, hours:6308, price:1250000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2021, hours:5978, price:1300000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FD25T5M',                 cap:2.5, fuel:'エンジン', year:2021, hours:899,  price:2400000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FG20',                   cap:2.0, fuel:'エンジン', year:2018, hours:6930, price:1800000, source:'PCS' },
+  { maker:'三菱',               model:'FG20T',                   cap:2.0, fuel:'エンジン', year:2003, hours:1204, price:1700000, source:'PCS' },
+  { maker:'三菱',               model:'FGE15T',                  cap:1.5, fuel:'エンジン', year:2014, hours:1505, price:1600000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FB15',                   cap:1.5, fuel:'電動',    year:2018, hours:2161, price:1370000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FGL20',               cap:2.0, fuel:'エンジン', year:2021, hours:1301, price:1880000, source:'PCS' },
+  // PCS p.6
+  { maker:'トヨタ',             model:'02-8FD30',                cap:3.0, fuel:'エンジン', year:2019, hours:5616, price:2730000, source:'PCS' },
+  { maker:'住友ナコ',           model:'51FB20PXII',              cap:2.0, fuel:'電動',    year:2013, hours:562,  price:1800000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FB20PN-80B-300',          cap:2.0, fuel:'電動',    year:2020, hours:6097, price:1600000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FDE25T YDM-F18D',         cap:2.5, fuel:'エンジン', year:2021, hours:83,   price:2450000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FG20',                   cap:2.0, fuel:'エンジン', year:2018, hours:7217, price:1800000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FDE25T YDM-F18D',         cap:2.5, fuel:'エンジン', year:2021, hours:1272, price:2450000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FDE25D YDM-F18D',         cap:2.5, fuel:'エンジン', year:2020, hours:426,  price:2750000, source:'PCS' },
+  { maker:'住友ナコ',           model:'11FD25PAXIII24D YDN-D2N', cap:2.5, fuel:'エンジン', year:2021, hours:5072, price:2350000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD25',                cap:2.5, fuel:'エンジン', year:2022, hours:5551, price:2600000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FGL15',               cap:1.5, fuel:'エンジン', year:2018, hours:512,  price:1700000, source:'PCS' },
+  // PCS p.7
+  { maker:'トヨタ',             model:'02-8FD25',                cap:2.5, fuel:'エンジン', year:2019, hours:1588, price:2600000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FGL20',               cap:2.0, fuel:'エンジン', year:2019, hours:679,  price:2300000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'KFGE15T',                 cap:1.5, fuel:'エンジン', year:2018, hours:277,  price:1600000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FGE25T EBT-F17DG-1',     cap:2.5, fuel:'エンジン', year:2020, hours:253,  price:2200000, source:'PCS' },
+  { maker:'コマツ',             model:'FG30T-17',                cap:3.0, fuel:'エンジン', year:2022, hours:1386, price:2900000, source:'PCS' },
+  { maker:'トヨタ',             model:'7FBRS15',                 cap:1.5, fuel:'電動',    year:2015, hours:6970, price:1450000, source:'PCS' },
+  { maker:'コマツ',             model:'FD25T-17',                cap:2.5, fuel:'エンジン', year:2014, hours:6329, price:2500000, source:'PCS' },
+  { maker:'三菱',               model:'FDE35AT YDM-F14F',        cap:3.5, fuel:'エンジン', year:2015, hours:3530, price:2900000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FG20',                   cap:2.0, fuel:'エンジン', year:2017, hours:3889, price:1850000, source:'PCS' },
+  // PCS p.8
+  { maker:'住友ナコ',           model:'11FD25PAXI94D',           cap:2.5, fuel:'エンジン', year:2014, hours:57,   price:2300000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'YDM-F18D',                cap:2.5, fuel:'エンジン', year:2022, hours:1097, price:2450000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FGL20',                  cap:2.0, fuel:'エンジン', year:2016, hours:200,  price:1750000, source:'PCS' },
+  { maker:'住友ナコ',           model:'03FL15PAXIII21D',         cap:1.5, fuel:'エンジン', year:2022, hours:3842, price:1100000, source:'PCS' },
+  { maker:'トヨタ',             model:'52-8FDJ35',               cap:3.5, fuel:'エンジン', year:2012, hours:7573, price:2800000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD25',                cap:2.5, fuel:'エンジン', year:2015, hours:2333, price:2500000, source:'PCS' },
+  { maker:'トヨタ',             model:'7FBH15',                  cap:1.5, fuel:'電動',    year:2013, hours:4815, price:1490000, source:'PCS' },
+  { maker:'トヨタ',             model:'52-8FD30',                cap:3.0, fuel:'エンジン', year:2007, hours:7680, price:2500000, source:'PCS' },
+  // PCS p.9
+  { maker:'三菱',               model:'FDE25T YDM-F18D',         cap:2.5, fuel:'エンジン', year:2016, hours:3168, price:2300000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD15',                cap:1.5, fuel:'エンジン', year:2018, hours:7131, price:1650000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FGE25P-D EBT-F17EG',     cap:2.5, fuel:'エンジン', year:2023, hours:1610, price:2300000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2019, hours:3398, price:1300000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2019, hours:3914, price:1300000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FD15T14',                 cap:1.5, fuel:'エンジン', year:2020, hours:6954, price:1700000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2019, hours:4294, price:1500000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FG25',                cap:2.5, fuel:'エンジン', year:2021, hours:5008, price:2300000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FD30T5M YDM-F202',        cap:3.0, fuel:'エンジン', year:2019, hours:2713, price:2700000, source:'PCS' },
+  { maker:'三菱',               model:'FD15T EDM-F16D',          cap:1.5, fuel:'エンジン', year:2014, hours:4938, price:1600000, source:'PCS' },
+  // PCS p.10
+  { maker:'トヨタ',             model:'02-8FGK25',               cap:2.5, fuel:'エンジン', year:2019, hours:6966, price:2250000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FGL15',               cap:1.5, fuel:'エンジン', year:2023, hours:59,   price:2100000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBH25',                  cap:2.5, fuel:'電動',    year:2018, hours:3157, price:2100000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2020, hours:5906, price:2100000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FGL20',               cap:2.0, fuel:'エンジン', year:2012, hours:2450, price:1800000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FGE15P-T',                cap:1.5, fuel:'エンジン', year:2022, hours:221,  price:1800000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2019, hours:4058, price:2100000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FG25',                   cap:2.5, fuel:'エンジン', year:2013, hours:984,  price:2200000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2021, hours:5634, price:1300000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBL15',                  cap:1.5, fuel:'電動',    year:2024, hours:763,  price:1750000, source:'PCS' },
+  // PCS p.11
+  { maker:'トヨタ',             model:'52-8FDJ35',               cap:3.5, fuel:'エンジン', year:2011, hours:4967, price:2700000, source:'PCS' },
+  { maker:'コマツ',             model:'FG30T-17',                cap:3.0, fuel:'エンジン', year:2018, hours:1171, price:2800000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FDE25T YDM-F18D',         cap:2.5, fuel:'エンジン', year:2019, hours:6836, price:2390000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FDL25',               cap:2.5, fuel:'エンジン', year:2018, hours:7257, price:2450000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2021, hours:5929, price:1300000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2022, hours:6734, price:2200000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD25',                cap:2.5, fuel:'エンジン', year:2016, hours:1702, price:2500000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FDE20P-T',                cap:2.0, fuel:'エンジン', year:2025, hours:91,   price:2550000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2022, hours:7006, price:1200000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBE15',                  cap:1.5, fuel:'電動',    year:2021, hours:4967, price:1550000, source:'PCS' },
+  // PCS p.12
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2018, hours:9265, price:2100000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2018, hours:4832, price:2190000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FGL20',                  cap:2.0, fuel:'エンジン', year:2014, hours:608,  price:1750000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2018, hours:5591, price:2200000, source:'PCS' },
+  { maker:'住友ナコ',           model:'11FD25PAXIII24D YDN-D2N', cap:2.5, fuel:'エンジン', year:2020, hours:2836, price:2550000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FG20',                cap:2.0, fuel:'エンジン', year:2018, hours:6296, price:1850000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2018, hours:3622, price:1400000, source:'PCS' },
+  { maker:'トヨタ',             model:'52-8FD25',                cap:2.5, fuel:'エンジン', year:2013, hours:4679, price:2300000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2021, hours:6801, price:1190000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2020, hours:7442, price:1200000, source:'PCS' },
+  // PCS p.13
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2020, hours:5443, price:1200000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD30',                cap:3.0, fuel:'エンジン', year:2020, hours:5271, price:2960000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD30',                cap:3.0, fuel:'エンジン', year:2018, hours:3977, price:2800000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FDE25T YDM-F18D',         cap:2.5, fuel:'エンジン', year:2020, hours:3589, price:2420000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD25',                cap:2.5, fuel:'エンジン', year:2017, hours:5560, price:2410000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD30',                cap:3.0, fuel:'エンジン', year:2020, hours:6716, price:2860000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FGE20CT EBT-F34G-1',     cap:2.0, fuel:'エンジン', year:2018, hours:7410, price:1700000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FDE25T',                  cap:2.5, fuel:'エンジン', year:2020, hours:3410, price:2350000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FDE25T YDM-F18D',         cap:2.5, fuel:'エンジン', year:2020, hours:4037, price:2350000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FG15',                   cap:1.5, fuel:'エンジン', year:2014, hours:6232, price:1500000, source:'PCS' },
+  // PCS p.14
+  { maker:'トヨタ',             model:'02-8FDJ35',               cap:3.5, fuel:'エンジン', year:2019, hours:3403, price:3300000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2020, hours:7135, price:1200000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2019, hours:6942, price:1100000, source:'PCS' },
+  { maker:'住友ナコ',           model:'13FD30PAXIII24D',         cap:3.0, fuel:'エンジン', year:2018, hours:4334, price:2700000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FB25',                   cap:2.5, fuel:'電動',    year:2019, hours:5354, price:2600000, source:'PCS' },
+  { maker:'住友ナコ',           model:'11FG25PAXIII21D',         cap:2.5, fuel:'エンジン', year:2020, hours:5204, price:2200000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FDL25',               cap:2.5, fuel:'エンジン', year:2020, hours:4319, price:2450000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2018, hours:7274, price:2090000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FGE20T',                  cap:2.0, fuel:'エンジン', year:2019, hours:422,  price:1700000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FD15',                   cap:1.5, fuel:'エンジン', year:2011, hours:3251, price:1750000, source:'PCS' },
+  // PCS p.15
+  { maker:'三菱ロジスネクスト', model:'FDE20P-T YDM-F18D',       cap:2.0, fuel:'エンジン', year:2023, hours:231,  price:2500000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD30',                cap:3.0, fuel:'エンジン', year:2019, hours:4405, price:2890000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FB15',                   cap:1.5, fuel:'電動',    year:2020, hours:8739, price:1490000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD30',                cap:3.0, fuel:'エンジン', year:2020, hours:7588, price:2960000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2020, hours:6932, price:1200000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBH25',                  cap:2.5, fuel:'電動',    year:2020, hours:855,  price:2100000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2018, hours:8908, price:1110000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2021, hours:8895, price:1550000, source:'PCS' },
+  { maker:'トヨタ',             model:'7FBR15',                  cap:1.5, fuel:'電動',    year:2015, hours:3895, price:1400000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2017, hours:2286, price:2350000, source:'PCS' },
+  // PCS p.16
+  { maker:'トヨタ',             model:'02-8FG30',                cap:3.0, fuel:'エンジン', year:2021, hours:3658, price:2900000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FG20',                cap:2.0, fuel:'エンジン', year:2016, hours:3907, price:1800000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2010, hours:3035, price:2220000, source:'PCS' },
+  { maker:'住友ナコ',           model:'11FD20PAXIII24D',         cap:2.0, fuel:'エンジン', year:2014, hours:5346, price:1800000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD25',                cap:2.5, fuel:'エンジン', year:2020, hours:4308, price:2550000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FB20',                   cap:2.0, fuel:'電動',    year:2019, hours:6957, price:2330000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2018, hours:4760, price:2190000, source:'PCS' },
+  { maker:'トヨタ',             model:'52-8FD30',                cap:3.0, fuel:'エンジン', year:2014, hours:7296, price:2650000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2018, hours:7692, price:2140000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2018, hours:6864, price:2140000, source:'PCS' },
+  // PCS p.17
+  { maker:'トヨタ',             model:'02-8FDL15',               cap:1.5, fuel:'エンジン', year:2015, hours:3590, price:1600000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FG25',                cap:2.5, fuel:'エンジン', year:2020, hours:3175, price:2300000, source:'PCS' },
+  { maker:'コマツ',             model:'FD30C-17',                cap:3.0, fuel:'エンジン', year:2010, hours:354,  price:2650000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FG30',                cap:3.0, fuel:'エンジン', year:2021, hours:3877, price:3000000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2018, hours:5630, price:2180000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2018, hours:6073, price:2000000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD25',                cap:2.5, fuel:'エンジン', year:2018, hours:6540, price:2400000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FDL20',               cap:2.0, fuel:'エンジン', year:2018, hours:591,  price:2350000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FGK30',                  cap:3.0, fuel:'エンジン', year:2014, hours:3041, price:2200000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FGKL20',                 cap:2.0, fuel:'エンジン', year:2011, hours:2689, price:1600000, source:'PCS' },
+  // PCS p.18
+  { maker:'トヨタ',             model:'02-8FD25',                cap:2.5, fuel:'エンジン', year:2016, hours:4392, price:2300000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2020, hours:5008, price:1320000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD30',                cap:3.0, fuel:'エンジン', year:2017, hours:7453, price:2930000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2020, hours:6167, price:1220000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD30',                cap:3.0, fuel:'エンジン', year:2019, hours:2586, price:2750000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FGE30T EBT-F13FG',        cap:3.0, fuel:'エンジン', year:2015, hours:3331, price:2300000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD20',                cap:2.0, fuel:'エンジン', year:2018, hours:6630, price:2150000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FB25',                   cap:2.5, fuel:'電動',    year:2020, hours:9219, price:1860000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FDE35AT YDM-F14F',        cap:3.5, fuel:'エンジン', year:2020, hours:4497, price:3200000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FBRMW15-80B-430M',        cap:1.5, fuel:'電動',    year:2018, hours:3554, price:1500000, source:'PCS' },
+  // PCS p.19
+  { maker:'トヨタ',             model:'8FBR15',                  cap:1.5, fuel:'電動',    year:2021, hours:7201, price:1250000, source:'PCS' },
+  { maker:'住友ナコ',           model:'11FD20PASIII24D YDN-D2N', cap:2.0, fuel:'エンジン', year:2020, hours:3594, price:2290000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBL15',                  cap:1.5, fuel:'電動',    year:2020, hours:7418, price:1400000, source:'PCS' },
+  { maker:'住友ナコ',           model:'11FD20AXIII24S YDN-SD2G', cap:2.0, fuel:'エンジン', year:2021, hours:5152, price:2280000, source:'PCS' },
+  { maker:'トヨタ',             model:'52-8FD25',                cap:2.5, fuel:'エンジン', year:2006, hours:7055, price:2300000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FD18',                cap:1.8, fuel:'エンジン', year:2018, hours:972,  price:1930000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FGE25T EBT-F17DG-1',     cap:2.5, fuel:'エンジン', year:2019, hours:161,  price:2000000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FG20',                cap:2.0, fuel:'エンジン', year:2013, hours:4966, price:1850000, source:'PCS' },
+  { maker:'コマツ',             model:'FD25T-17',                cap:2.5, fuel:'エンジン', year:2015, hours:538,  price:2370000, source:'PCS' },
+  { maker:'トヨタ',             model:'50-8FD30',                cap:3.0, fuel:'エンジン', year:2008, hours:1347, price:2500000, source:'PCS' },
+  // PCS p.20
+  { maker:'トヨタ',             model:'02-8FG25',                cap:2.5, fuel:'エンジン', year:2016, hours:314,  price:2300000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FHGE20T5 EBT-F183',       cap:2.0, fuel:'エンジン', year:2020, hours:1814, price:1760000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FGL20',                  cap:2.0, fuel:'エンジン', year:2007, hours:514,  price:1640000, source:'PCS' },
+  { maker:'住友ナコ',           model:'11FG25PAXIII21D',         cap:2.5, fuel:'エンジン', year:2020, hours:2709, price:2200000, source:'PCS' },
+  { maker:'ユニキャリア',       model:'FD30T15 YDM-F180A',       cap:3.0, fuel:'エンジン', year:2016, hours:1690, price:2600000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FD15T14',                 cap:1.5, fuel:'エンジン', year:2023, hours:24,   price:2000000, source:'PCS' },
+  { maker:'住友ナコ',           model:'11FD25PAXIII24D YDN-D2N', cap:2.5, fuel:'エンジン', year:2018, hours:585,  price:2400000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FG15',                cap:1.5, fuel:'エンジン', year:2010, hours:3446, price:1500000, source:'PCS' },
+  { maker:'三菱',               model:'KFD25T',                  cap:2.5, fuel:'エンジン', year:2012, hours:2123, price:2410000, source:'PCS' },
+  { maker:'トヨタ',             model:'7FBE10',                  cap:1.0, fuel:'電動',    year:2008, hours:6595, price:1420000, source:'PCS' },
+  // PCS p.21
+  { maker:'住友ナコ',           model:'13FG30PAXIII25D EBT-G3H', cap:3.0, fuel:'エンジン', year:2016, hours:1806, price:2490000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FGL20',                  cap:2.0, fuel:'エンジン', year:2013, hours:4480, price:1730000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBH18',                  cap:1.8, fuel:'電動',    year:2020, hours:8560, price:1640000, source:'PCS' },
+  { maker:'住友ナコ',           model:'11FG25PAXIII21D EBT-G2L', cap:2.5, fuel:'エンジン', year:2016, hours:2816, price:2150000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FHGE35T5S EBT-F186',      cap:3.5, fuel:'エンジン', year:2016, hours:1718, price:2550000, source:'PCS' },
+  { maker:'トヨタ',             model:'7FBEL15',                 cap:1.5, fuel:'電動',    year:2015, hours:5675, price:1690000, source:'PCS' },
+  { maker:'トヨタ',             model:'FBT5',                    cap:0.5, fuel:'電動',    year:2023, hours:16,   price:690000,  source:'PCS' },
+  { maker:'トヨタ',             model:'FBT5',                    cap:0.5, fuel:'電動',    year:2023, hours:14,   price:690000,  source:'PCS' },
+  { maker:'トヨタ',             model:'FBT5',                    cap:0.5, fuel:'電動',    year:2023, hours:35,   price:690000,  source:'PCS' },
+  { maker:'トヨタ',             model:'7FB20',                   cap:2.0, fuel:'電動',    year:2015, hours:9168, price:1750000, source:'PCS' },
+  // PCS p.22
+  { maker:'トヨタ',             model:'02-8FD15',                cap:1.5, fuel:'エンジン', year:2020, hours:5321, price:1730000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FG30',                cap:3.0, fuel:'エンジン', year:2019, hours:5670, price:2550000, source:'PCS' },
+  { maker:'住友ナコ',           model:'13FD30PAXIII24D YDN-D3K', cap:3.0, fuel:'エンジン', year:2017, hours:4861, price:2700000, source:'PCS' },
+  { maker:'ユニキャリア',       model:'FB18-8',                  cap:1.8, fuel:'電動',    year:2014, hours:1298, price:1740000, source:'PCS' },
+  { maker:'トヨタ',             model:'02-8FG15',                cap:1.5, fuel:'エンジン', year:2018, hours:104,  price:1660000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FD20',                   cap:2.0, fuel:'エンジン', year:2014, hours:1271, price:1990000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FBRMW15-85-500M',         cap:1.5, fuel:'電動',    year:2019, hours:9201, price:1580000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FGE15T EBT-F34G-1',      cap:1.5, fuel:'エンジン', year:2021, hours:654,  price:1800000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FGL15',                  cap:1.5, fuel:'エンジン', year:2010, hours:4672, price:1530000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FGL15',                  cap:1.5, fuel:'エンジン', year:2010, hours:4624, price:1530000, source:'PCS' },
+  // アルプロス（2026年6月）
+  { maker:'ユニキャリア', model:'FD70-4L',      cap:5.65, fuel:'エンジン', year:2019, hours:4584, price:6800000, source:'アルプロス' },
+  { maker:'ユニキャリア', model:'FHD35T5S',     cap:3.10, fuel:'エンジン', year:2019, hours:1268, price:2550000, source:'アルプロス' },
+  { maker:'TCM',         model:'FD40T9',        cap:3.80, fuel:'エンジン', year:2005, hours:5177, price:3650000, source:'アルプロス' },
+  { maker:'ユニキャリア', model:'FD25T5M',      cap:1.75, fuel:'エンジン', year:2019, hours:6661, price:2300000, source:'アルプロス' },
+  { maker:'TCM',         model:'E1F4F40',       cap:4.00, fuel:'エンジン', year:2021, hours:4490, price:3600000, source:'アルプロス' },
+  { maker:'TCM',         model:'EG1F4F50',      cap:4.80, fuel:'エンジン', year:2019, hours:9835, price:3950000, source:'アルプロス' },
+  { maker:'ユニキャリア', model:'FHD25T5',      cap:1.65, fuel:'エンジン', year:2017, hours:3022, price:2150000, source:'アルプロス' },
+  { maker:'ユニキャリア', model:'FHD30T5',      cap:2.45, fuel:'エンジン', year:2018, hours:5085, price:2680000, source:'アルプロス' },
+  // PCS p.23
+  { maker:'住友ナコ',           model:'51FB25PXIII',             cap:2.5, fuel:'電動',    year:2019, hours:2844, price:3050000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FG10',                   cap:1.0, fuel:'エンジン', year:2018, hours:548,  price:1500000, source:'PCS' },
+  { maker:'三菱ロジスネクスト', model:'FDE25T YDN-F18D',         cap:2.5, fuel:'エンジン', year:2019, hours:6369, price:2350000, source:'PCS' },
+  { maker:'コマツ',             model:'FG15C-21',                cap:1.5, fuel:'エンジン', year:2019, hours:2630, price:1620000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBR14',                  cap:1.4, fuel:'電動',    year:2018, hours:6360, price:2550000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBH15',                  cap:1.5, fuel:'電動',    year:2020, hours:5560, price:1680000, source:'PCS' },
+  { maker:'トヨタ',             model:'8FBH15',                  cap:1.5, fuel:'電動',    year:2020, hours:7488, price:1680000, source:'PCS' },
+  { maker:'ニチユ',             model:'FBRM15-80-300',           cap:1.5, fuel:'電動',    year:2017, hours:485,  price:2550000, source:'PCS' },
+  // 自社HP（fuji-auto-ind.co.jp/forklift/ p.1：2026年6月）
+  { maker:'トヨタ',      model:'7FBR15',                    cap:1.50, fuel:'電動',    year:2015, hours:14837, price:480000,  source:'自社HP' },
+  { maker:'三菱',        model:'KFDE25T',                   cap:2.10, fuel:'エンジン', year:2019, hours:5484,  price:2000000, source:'自社HP' },
+  { maker:'トヨタ',      model:'7FBL15',                    cap:1.50, fuel:'電動',    year:2013, hours:11179, price:550000,  source:'自社HP' },
+  { maker:'トヨタ',      model:'02-8FD15',                  cap:1.50, fuel:'エンジン', year:2020, hours:5008,  price:1650000, source:'自社HP' },
+  { maker:'トヨタ',      model:'7FBR15',                    cap:1.45, fuel:'電動',    year:2015, hours:10794, price:550000,  source:'自社HP' },
+  { maker:'ユニキャリア', model:'FD25T5M',                  cap:2.20, fuel:'エンジン', year:2020, hours:3053,  price:2150000, source:'自社HP' },
+  { maker:'BYD',         model:'ECB25D',                   cap:2.20, fuel:'電動',    year:2024, hours:533,   price:3900000, source:'自社HP' },
+  { maker:'トヨタ',      model:'7FBR15',                    cap:1.50, fuel:'電動',    year:2016, hours:11283, price:480000,  source:'自社HP' },
+  { maker:'トヨタ',      model:'3FB9',                      cap:0.90, fuel:'電動',    year:2021, hours:5851,  price:900000,  source:'自社HP' },
+  { maker:'ニチユ',      model:'FB20PLN-77-300PFLPSPL',     cap:1.37, fuel:'電動',    year:2015, hours:3603,  price:1350000, source:'自社HP' },
+  // 自社HP p.2〜p.8（2026年6月）
+  { maker:'トヨタ', model:'8FB15', cap:1.5, fuel:'電動', year:2017, hours:5408, price:1400000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR10', cap:1, fuel:'電動', year:2016, hours:7338, price:480000, source:'自社HP' },
+  { maker:'トヨタ', model:'8FBRS15', cap:1.5, fuel:'電動', year:2019, hours:10360, price:680000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR10', cap:1, fuel:'電動', year:2017, hours:5629, price:550000, source:'自社HP' },
+  { maker:'トヨタ', model:'02-8FG25', cap:2.5, fuel:'エンジン', year:2019, hours:9700, price:1900000, source:'自社HP' },
+  { maker:'三菱', model:'KFDE25T', cap:1.35, fuel:'エンジン', year:2019, hours:7481, price:2000000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR18', cap:1.8, fuel:'電動', year:2016, hours:6240, price:650000, source:'自社HP' },
+  { maker:'ニチユ', model:'FBT15P-80-300', cap:1.5, fuel:'電動', year:2020, hours:5095, price:1650000, source:'自社HP' },
+  { maker:'トヨタ', model:'8FB25', cap:2.1, fuel:'電動', year:2018, hours:4650, price:1890000, source:'自社HP' },
+  { maker:'トヨタ', model:'8FBR15', cap:1.5, fuel:'電動', year:2018, hours:11718, price:750000, source:'自社HP' },
+  { maker:'三菱', model:'FGE25T', cap:2.45, fuel:'エンジン', year:2018, hours:7989, price:1550000, source:'自社HP' },
+  { maker:'コマツ', model:'FB09RS-15', cap:0.9, fuel:'電動', year:2022, hours:786, price:770000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.5, fuel:'電動', year:2015, hours:11521, price:490000, source:'自社HP' },
+  { maker:'ニチユ', model:'FBT15P-80-300', cap:1.5, fuel:'電動', year:2022, hours:1966, price:1450000, source:'自社HP' },
+  { maker:'ニチユ', model:'FBRMW15-85-550M', cap:1.15, fuel:'電動', year:2023, hours:1122, price:1750000, source:'自社HP' },
+  { maker:'ニチユ', model:'FBRM15-85-300SF', cap:1.35, fuel:'電動', year:2022, hours:1967, price:1550000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.5, fuel:'電動', year:2015, hours:8845, price:480000, source:'自社HP' },
+  { maker:'日産', model:'EBT-NP1F1', cap:1.5, fuel:'エンジン', year:2008, hours:1248, price:950000, source:'自社HP' },
+  { maker:'トヨタ', model:'8FBR15', cap:1.5, fuel:'電動', year:2020, hours:6102, price:930000, source:'自社HP' },
+  { maker:'トヨタ', model:'02-8FG25', cap:2.5, fuel:'エンジン', year:2019, hours:4574, price:2200000, source:'自社HP' },
+  { maker:'トヨタ', model:'02-8FD25', cap:2.3, fuel:'エンジン', year:2020, hours:3900, price:2200000, source:'自社HP' },
+  { maker:'トヨタ', model:'02-8FG25', cap:2.5, fuel:'エンジン', year:2009, hours:9113, price:1700000, source:'自社HP' },
+  { maker:'ニチユ', model:'FBT15P-80-300SF', cap:1.4, fuel:'電動', year:2022, hours:2824, price:1783500, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.5, fuel:'電動', year:2015, hours:9715, price:550000, source:'自社HP' },
+  { maker:'ユニキャリア', model:'FB25-8', cap:2.2, fuel:'電動', year:2019, hours:5991, price:1600000, source:'自社HP' },
+  { maker:'トヨタ', model:'02-8FDL25', cap:2.5, fuel:'エンジン', year:2019, hours:8452, price:1950000, source:'自社HP' },
+  { maker:'トヨタ', model:'3FB9', cap:0.9, fuel:'電動', year:2017, hours:6589, price:600000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.5, fuel:'電動', year:2015, hours:6793, price:480000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBRS15', cap:1.1, fuel:'電動', year:2017, hours:9631, price:680000, source:'自社HP' },
+  { maker:'トヨタ', model:'02-8FDL25', cap:2, fuel:'エンジン', year:2022, hours:1198, price:2950000, source:'自社HP' },
+  { maker:'ニチユ', model:'FB15P-80-300SF', cap:1.5, fuel:'電動', year:2023, hours:971, price:1550000, source:'自社HP' },
+  { maker:'トヨタ', model:'8FB15', cap:1.5, fuel:'電動', year:2020, hours:4413, price:1500000, source:'自社HP' },
+  { maker:'三菱', model:'FDE35AP-T', cap:2.85, fuel:'エンジン', year:2023, hours:612, price:2980000, source:'自社HP' },
+  { maker:'トヨタ', model:'8FBL15', cap:1.5, fuel:'電動', year:2022, hours:4033, price:1800000, source:'自社HP' },
+  { maker:'ニチユ', model:'FBRMW15-85-550M', cap:1.15, fuel:'電動', year:2023, hours:3347, price:1750000, source:'自社HP' },
+  { maker:'トヨタ', model:'02-8FD15', cap:1.5, fuel:'エンジン', year:2019, hours:3129, price:1450000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.5, fuel:'電動', year:2015, hours:12793, price:550000, source:'自社HP' },
+  { maker:'ニチユ', model:'FB15P-80-300AF', cap:1.45, fuel:'電動', year:2023, hours:1557, price:1985000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.5, fuel:'電動', year:2013, hours:8867, price:490000, source:'自社HP' },
+  { maker:'ニチユ', model:'FB25P-80-3F450SF', cap:2.2, fuel:'電動', year:2020, hours:7881, price:2000000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.35, fuel:'電動', year:2017, hours:6214, price:660000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.3, fuel:'電動', year:2016, hours:10309, price:550000, source:'自社HP' },
+  { maker:'ニチユ', model:'FB15P-80-3F430SF', cap:1.4, fuel:'電動', year:2021, hours:3050, price:1800000, source:'自社HP' },
+  { maker:'ユニキャリア', model:'FD15T14', cap:1.5, fuel:'エンジン', year:2021, hours:4683, price:1300000, source:'自社HP' },
+  { maker:'ニチユ', model:'FB25P-80-3F430SF', cap:2.4, fuel:'電動', year:2021, hours:1824, price:2100000, source:'自社HP' },
+  { maker:'トヨタ', model:'8FB15', cap:1.5, fuel:'電動', year:2019, hours:2194, price:1680000, source:'自社HP' },
+  { maker:'トヨタ', model:'8FB25', cap:2.05, fuel:'電動', year:2020, hours:4210, price:2500000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.5, fuel:'電動', year:2016, hours:11435, price:480000, source:'自社HP' },
+  { maker:'三菱', model:'KFDE25T', cap:2.1, fuel:'エンジン', year:2021, hours:4935, price:2000000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.5, fuel:'電動', year:2017, hours:10616, price:480000, source:'自社HP' },
+  { maker:'三菱', model:'FD15T14', cap:1.5, fuel:'エンジン', year:2022, hours:666, price:1400000, source:'自社HP' },
+  { maker:'三菱', model:'FD15T14', cap:1.5, fuel:'エンジン', year:2022, hours:1595, price:1400000, source:'自社HP' },
+  { maker:'ニチユ', model:'FBRMW14-85-430M', cap:1.4, fuel:'電動', year:2021, hours:1551, price:1600000, source:'自社HP' },
+  { maker:'三菱', model:'KFDE25T', cap:2.1, fuel:'エンジン', year:2022, hours:1650, price:2200000, source:'自社HP' },
+  { maker:'トヨタ', model:'02-8FD30', cap:3, fuel:'エンジン', year:2016, hours:7389, price:2400000, source:'自社HP' },
+  { maker:'三菱', model:'FDE25P-T', cap:2.35, fuel:'エンジン', year:2022, hours:2611, price:2200000, source:'自社HP' },
+  { maker:'ユニキャリア', model:'FHD15T3Z', cap:1.35, fuel:'エンジン', year:2014, hours:5128, price:1100000, source:'自社HP' },
+  { maker:'トヨタ', model:'8FB15', cap:1.5, fuel:'電動', year:2018, hours:6950, price:1350000, source:'自社HP' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.5, fuel:'電動', year:2015, hours:10966, price:610000, source:'自社HP' },
+  { maker:'ニチユ', model:'FB15P-80-300', cap:1.5, fuel:'電動', year:2023, hours:705, price:1789000, source:'自社HP' },
+  { maker:'ニチユ', model:'FBRMW14-85-430M', cap:1.4, fuel:'電動', year:2023, hours:789, price:1700000, source:'自社HP' },
+  { maker:'ニチユ', model:'FBRMW14-85-430M', cap:1.4, fuel:'電動', year:2023, hours:2232, price:2150000, source:'自社HP' },
+  { maker:'ニチユ', model:'FB25P-80-3F430SF', cap:2.4, fuel:'電動', year:2023, hours:1344, price:2000000, source:'自社HP' },
+  { maker:'トヨタ', model:'02-8FG15', cap:1.5, fuel:'エンジン', year:2018, hours:8221, price:1500000, source:'自社HP' },
+  { maker:'トヨタ', model:'8FGL15', cap:1.5, fuel:'エンジン', year:2018, hours:1441, price:1500000, source:'自社HP' },
+  { maker:'トヨタ', model:'8FB15', cap:1.5, fuel:'電動', year:2017, hours:6376, price:1250000, source:'自社HP' },
+  { maker:'トヨタ', model:'8FB15', cap:1.4, fuel:'電動', year:2018, hours:4028, price:1500000, source:'自社HP' },
+  { maker:'トヨタ', model:'8FBE15', cap:1.5, fuel:'電動', year:2018, hours:5188, price:1300000, source:'自社HP' },
+  // LiftNeeds（liftneeds.net：2026年6月）
+  { maker:'トヨタ', model:'7FBRK9', cap:0.9, fuel:'電動', year:2016, hours:2694, price:850000, source:'LiftNeeds' },
+  { maker:'日産', model:'U01F15', cap:1.4, fuel:'電動', year:2011, hours:3556, price:700000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FB15', cap:1.5, fuel:'電動', year:2018, hours:1000, price:1350000, source:'LiftNeeds' },
+  { maker:'ユニキャリア', model:'FD25T14', cap:2.45, fuel:'エンジン', year:2015, hours:675, price:1700000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FBR15', cap:1.5, fuel:'電動', year:2019, hours:144, price:1250000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FBL25', cap:2.5, fuel:'電動', year:2019, hours:207, price:1950000, source:'LiftNeeds' },
+  { maker:'ニチユ', model:'FB18P-75-400SF', cap:1.6, fuel:'電動', year:2013, hours:5250, price:950000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.5, fuel:'電動', year:2014, hours:4123, price:650000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'7FD25', cap:2.5, fuel:'エンジン', year:2004, hours:7709, price:1000000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'02-8FG15', cap:1.5, fuel:'エンジン', year:2015, hours:3600, price:1450000, source:'LiftNeeds' },
+  { maker:'ニチユ', model:'FB15PN-75-400SF', cap:1.4, fuel:'電動', year:2011, hours:1120, price:1250000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'7FBL15', cap:1.4, fuel:'電動', year:2014, hours:3572, price:1600000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'7FBRK9', cap:0.9, fuel:'電動', year:2015, hours:5028, price:550000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.5, fuel:'電動', year:2016, hours:5340, price:900000, source:'LiftNeeds' },
+  { maker:'ユニキャリア', model:'FHGE25T15', cap:2.5, fuel:'エンジン', year:2018, hours:4242, price:1350000, source:'LiftNeeds' },
+  { maker:'TCM', model:'FRHB15-8', cap:1.5, fuel:'電動', year:2012, hours:3100, price:700000, source:'LiftNeeds' },
+  { maker:'ユニキャリア', model:'FGE15T5', cap:1.4, fuel:'エンジン', year:2016, hours:670, price:1300000, source:'LiftNeeds' },
+  { maker:'三菱', model:'FGE15T', cap:1.45, fuel:'エンジン', year:2019, hours:1476, price:1350000, source:'LiftNeeds' },
+  { maker:'ユニキャリア', model:'FGE15T15', cap:1.45, fuel:'エンジン', year:2016, hours:2413, price:1000000, source:'LiftNeeds' },
+  { maker:'ユニキャリア', model:'FHGE20T15', cap:2, fuel:'エンジン', year:2017, hours:3505, price:1300000, source:'LiftNeeds' },
+  { maker:'ユニキャリア', model:'ZAF-NJ1B1', cap:1.5, fuel:'電動', year:2014, hours:970, price:1000000, source:'LiftNeeds' },
+  { maker:'ユニキャリア', model:'FB15-8', cap:1.4, fuel:'電動', year:2018, hours:636, price:1350000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FG18', cap:1.2, fuel:'エンジン', year:2011, hours:1270, price:1000000, source:'LiftNeeds' },
+  { maker:'ユニキャリア', model:'FRB15-8A', cap:1.5, fuel:'電動', year:2016, hours:3536, price:750000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FBR15', cap:1.45, fuel:'電動', year:2022, hours:366, price:1400000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'7FBR15', cap:1.5, fuel:'電動', year:2017, hours:1480, price:1200000, source:'LiftNeeds' },
+  { maker:'ニチユ', model:'FBRM9N-80-300', cap:0.9, fuel:'電動', year:2015, hours:640, price:750000, source:'LiftNeeds' },
+  { maker:'ニチユ', model:'FBRM15-75-300', cap:1.5, fuel:'電動', year:2014, hours:4906, price:850000, source:'LiftNeeds' },
+  { maker:'ニチユ', model:'FBRMW15-80-550', cap:1.15, fuel:'電動', year:2017, hours:5231, price:1050000, source:'LiftNeeds' },
+  { maker:'ニチユ', model:'FB15PN-77-300SF', cap:1.4, fuel:'電動', year:2016, hours:3580, price:1100000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FBL20', cap:1.95, fuel:'電動', year:2017, hours:4300, price:1400000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FB15', cap:1.5, fuel:'電動', year:2019, hours:139, price:1700000, source:'LiftNeeds' },
+  { maker:'ユニキャリア', model:'FD25T5M', cap:2.5, fuel:'エンジン', year:2019, hours:576, price:2050000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'02-8FD15', cap:1.5, fuel:'エンジン', year:2018, hours:2887, price:1550000, source:'LiftNeeds' },
+  { maker:'三菱', model:'FDE25T', cap:2.4, fuel:'エンジン', year:2018, hours:3112, price:1850000, source:'LiftNeeds' },
+  { maker:'ユニキャリア', model:'FD15T14', cap:1.3, fuel:'エンジン', year:2019, hours:2216, price:1550000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'7FGL15', cap:1.5, fuel:'エンジン', year:1999, hours:1662, price:950000, source:'LiftNeeds' },
+  { maker:'ニチユ', model:'FBRM9N-85-350SF', cap:0.8, fuel:'電動', year:2019, hours:2212, price:750000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FBR18', cap:1.55, fuel:'電動', year:2018, hours:226, price:1600000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FBP10', cap:1, fuel:'電動', year:2016, hours:1566, price:580000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'02-8FGL15', cap:1.5, fuel:'エンジン', year:2016, hours:7057, price:1150000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FBR15', cap:1.4, fuel:'電動', year:2018, hours:1208, price:1600000, source:'LiftNeeds' },
+  { maker:'ニチユ', model:'FBRMW18-80-400', cap:1.6, fuel:'電動', year:2019, hours:58, price:1100000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'02-8FD25', cap:1.55, fuel:'エンジン', year:2017, hours:5113, price:2000000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FB15', cap:1.5, fuel:'電動', year:2021, hours:1368, price:1850000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FB15', cap:1.5, fuel:'電動', year:2022, hours:258, price:1850000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FGL20', cap:1.95, fuel:'エンジン', year:2013, hours:1840, price:1250000, source:'LiftNeeds' },
+  { maker:'三菱', model:'FDE25T', cap:2.5, fuel:'エンジン', year:2021, hours:478, price:2200000, source:'LiftNeeds' },
+  { maker:'三菱', model:'KFGE15T', cap:1.48, fuel:'エンジン', year:2016, hours:2901, price:1450000, source:'LiftNeeds' },
+  { maker:'ニチユ', model:'FBRM9N-80-300SF', cap:0.8, fuel:'電動', year:2016, hours:152, price:750000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FBR15', cap:1.5, fuel:'電動', year:2021, hours:524, price:1100000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FBR15', cap:1.5, fuel:'電動', year:2021, hours:656, price:1200000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FBR15', cap:1.5, fuel:'電動', year:2022, hours:1343, price:1200000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FB18', cap:1.75, fuel:'電動', year:2021, hours:1210, price:1850000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'8FBRK9', cap:0.9, fuel:'電動', year:2021, hours:1215, price:950000, source:'LiftNeeds' },
+  { maker:'トヨタ', model:'02-8FDL25', cap:2.5, fuel:'エンジン', year:2021, hours:1410, price:2300000, source:'LiftNeeds' },
+  { maker:'三菱', model:'D1F4F35', cap:3.5, fuel:'エンジン', year:2021, hours:3300, price:2550000, source:'LiftNeeds' },
+];
+
+// ══════════════════════════════════════════════════════════
+// パスワード認証
+// ══════════════════════════════════════════════════════════
+(function () {
+  const KEY = 'flift_auth';
+  const lockEl  = document.getElementById('lock-screen');
+  const mainEl  = document.getElementById('main-app');
+  const inp     = document.getElementById('lock-input');
+  const btn     = document.getElementById('lock-btn');
+  const errEl   = document.getElementById('lock-error');
+
+  function unlock() { lockEl.style.display='none'; mainEl.style.display=''; sessionStorage.setItem(KEY,'1'); setTimeout(checkDataFreshness,600); }
+  if (sessionStorage.getItem(KEY)==='1') { unlock(); return; }
+
+  function tryLogin() {
+    if (inp.value === APP_PASSWORD) { unlock(); }
+    else {
+      errEl.textContent = 'パスワードが違います。もう一度入力してください。';
+      inp.classList.add('shake'); inp.value = '';
+      setTimeout(() => inp.classList.remove('shake'), 500);
+      inp.focus();
+    }
+  }
+  btn.addEventListener('click', tryLogin);
+  inp.addEventListener('keydown', e => { if (e.key==='Enter') tryLogin(); });
+  inp.focus();
+})();
+
+// ══════════════════════════════════════════════════════════
+// 在庫データ管理（localStorage）
+// ══════════════════════════════════════════════════════════
+const STOCK_KEY           = 'flift_stock';
+const MARKET_KEY          = 'flift_market';
+const MARKET_UPDATED_KEY  = 'flift_market_updated';
+const AUCTION_KEY         = 'flift_auction';
+const AUCTION_UPDATED_KEY = 'flift_auction_updated';
+let stockData   = [];
+let marketData  = [];
+let auctionData = [];
+let kaitoriMode = false;
+
+function loadStock() {
+  try {
+    const s = localStorage.getItem(STOCK_KEY);
+    stockData = s ? JSON.parse(s) : [...DEFAULT_STOCK];
+  } catch(e) { stockData = [...DEFAULT_STOCK]; }
+}
+function saveStock() {
+  localStorage.setItem(STOCK_KEY, JSON.stringify(stockData));
+}
+function loadMarket() {
+  try {
+    const s = localStorage.getItem(MARKET_KEY);
+    marketData = s ? JSON.parse(s) : DEFAULT_MARKET.map(v=>({...v}));
+  } catch(e) { marketData = DEFAULT_MARKET.map(v=>({...v})); }
+}
+function saveMarket() {
+  localStorage.setItem(MARKET_KEY, JSON.stringify(marketData));
+  localStorage.setItem(MARKET_UPDATED_KEY, new Date().toLocaleDateString('ja-JP'));
+}
+
+// ── オークションデータ ──
+function loadAuction() {
+  try {
+    const s = localStorage.getItem(AUCTION_KEY);
+    auctionData = s ? JSON.parse(s) : [];
+  } catch { auctionData = []; }
+}
+function saveAuction() {
+  localStorage.setItem(AUCTION_KEY, JSON.stringify(auctionData));
+  localStorage.setItem(AUCTION_UPDATED_KEY, new Date().toLocaleDateString('ja-JP'));
+}
+
+// ── データ鮮度チェック（ログイン後に呼ぶ）──
+function checkDataFreshness() {
+  const upd = localStorage.getItem(MARKET_UPDATED_KEY);
+  const banner = document.getElementById('freshness-banner');
+  const msgEl  = document.getElementById('freshness-msg');
+  if (!upd) return; // デフォルトデータのまま → チェック不要
+  const updDate   = new Date(upd.replace(/\//g,'-'));
+  const today     = new Date();
+  const daysSince = Math.floor((today - updDate) / (1000*60*60*24));
+  const is1st     = today.getDate() === 1;
+  if (daysSince >= 28) {
+    msgEl.textContent = `最終更新から${daysSince}日経過`;
+    banner.style.display = 'flex';
+  } else if (is1st) {
+    msgEl.textContent = '毎月1日の定期更新日です';
+    banner.style.display = 'flex';
+  }
+}
+
+// ── タブ切り替え ──
+function switchTab(tab) {
+  document.getElementById('tab-own').style.display     = tab==='own'     ? '' : 'none';
+  document.getElementById('tab-market').style.display  = tab==='market'  ? '' : 'none';
+  document.getElementById('tab-auction').style.display = tab==='auction' ? '' : 'none';
+  document.getElementById('tab-own-btn').classList.toggle('active',     tab==='own');
+  document.getElementById('tab-market-btn').classList.toggle('active',  tab==='market');
+  document.getElementById('tab-auction-btn').classList.toggle('active', tab==='auction');
+  if (tab==='market')  renderMarketTable();
+  if (tab==='auction') renderAuctionTable();
+}
+
+// ── 在庫管理モーダル ──
+function openStockModal() {
+  renderStockTable();
+  document.getElementById('stock-modal').style.display = 'flex';
+  switchTab('own');
+}
+function closeStockModal() {
+  document.getElementById('stock-modal').style.display = 'none';
+}
+
+// ── 自社在庫テーブル描画 ──
+function renderStockTable() {
+  const tbody   = document.getElementById('stock-tbody');
+  const countEl = document.getElementById('stock-count');
+  countEl.textContent = `現在の在庫：${stockData.length}台`;
+  tbody.innerHTML = '';
+  if (stockData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-msg">在庫データがありません。CSVを読み込むか、下のフォームから追加してください。</td></tr>';
+    return;
+  }
+  stockData.forEach((v, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${v.id}</td><td>${v.maker}</td><td>${v.model}</td>
+      <td>${v.cap}</td><td>${v.fuel}</td><td>${v.year}</td>
+      <td>${Number(v.hours).toLocaleString()}</td>
+      <td>¥${Number(v.price).toLocaleString()}</td>
+      <td><button class="del-btn" onclick="deleteVehicle(${i})">削除</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── 市場相場テーブル描画 ──
+function renderMarketTable() {
+  const tbody   = document.getElementById('market-tbody');
+  const countEl = document.getElementById('market-count');
+  const updEl   = document.getElementById('market-updated');
+  countEl.textContent = `登録件数：${marketData.length}件`;
+  const upd = localStorage.getItem(MARKET_UPDATED_KEY);
+  updEl.textContent = upd ? `最終更新：${upd}` : '最終更新：初期データ（2026年6月）';
+  tbody.innerHTML = '';
+  if (marketData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-msg">市場データがありません。CSVを読み込むか、下のフォームから追加してください。</td></tr>';
+    return;
+  }
+  marketData.forEach((v, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${v.maker}</td><td>${v.model||'-'}</td>
+      <td>${v.cap}</td><td>${v.fuel}</td><td>${v.year}</td>
+      <td>${Number(v.hours).toLocaleString()}</td>
+      <td>¥${Number(v.price).toLocaleString()}</td>
+      <td style="font-size:11px;color:#64748b">${v.source||'-'}</td>
+      <td><button class="del-btn" onclick="deleteMarketVehicle(${i})">削除</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function deleteVehicle(idx) {
+  const v = stockData[idx];
+  if (!confirm(`No.${v.id}（${v.maker} ${v.model}）を削除してよいですか？`)) return;
+  stockData.splice(idx, 1);
+  saveStock();
+  renderStockTable();
+}
+function deleteMarketVehicle(idx) {
+  const v = marketData[idx];
+  if (!confirm(`${v.maker} ${v.model||''}（${v.year}年・¥${Number(v.price).toLocaleString()}）を削除してよいですか？`)) return;
+  marketData.splice(idx, 1);
+  saveMarket();
+  renderMarketTable();
+}
+
+function addVehicle() {
+  const id    = document.getElementById('af-id').value.trim();
+  const maker = document.getElementById('af-maker').value.trim();
+  const model = document.getElementById('af-model').value.trim();
+  const cap   = parseFloat(document.getElementById('af-cap').value);
+  const fuel  = document.getElementById('af-fuel').value;
+  const year  = parseInt(document.getElementById('af-year').value);
+  const hours = parseInt(document.getElementById('af-hours').value);
+  const price = parseInt(document.getElementById('af-price').value);
+  if (!maker || !model || isNaN(cap) || isNaN(year) || isNaN(hours) || isNaN(price)) {
+    alert('未入力の項目があります。すべて入力してください。'); return;
+  }
+  stockData.push({ id: id || String(Date.now()), maker, model, cap, fuel, year, hours, price });
+  saveStock(); renderStockTable();
+  ['af-id','af-maker','af-model','af-cap','af-year','af-hours','af-price'].forEach(id => { document.getElementById(id).value = ''; });
+  alert(`${maker} ${model} を追加しました。`);
+}
+
+function addMarketVehicle() {
+  const maker  = document.getElementById('mf-maker').value.trim();
+  const model  = document.getElementById('mf-model').value.trim() || '-';
+  const cap    = parseFloat(document.getElementById('mf-cap').value);
+  const fuel   = document.getElementById('mf-fuel').value;
+  const year   = parseInt(document.getElementById('mf-year').value);
+  const hours  = parseInt(document.getElementById('mf-hours').value);
+  const price  = parseInt(document.getElementById('mf-price').value);
+  const source = document.getElementById('mf-source').value.trim() || 'その他';
+  if (!maker || isNaN(cap) || isNaN(year) || isNaN(hours) || isNaN(price)) {
+    alert('未入力の項目があります。'); return;
+  }
+  marketData.push({ maker, model, cap, fuel, year, hours, price, source });
+  saveMarket(); renderMarketTable();
+  ['mf-maker','mf-model','mf-cap','mf-year','mf-hours','mf-price','mf-source'].forEach(id => { document.getElementById(id).value = ''; });
+  alert(`${maker} を追加しました。`);
+}
+
+// ── CSV エクスポート（自社在庫）──
+function exportCSV() {
+  if (stockData.length === 0) { alert('在庫データがありません。'); return; }
+  const header = '管理番号,メーカー,型式,積載能力(t),燃料(電動/エンジン),年式,アワーメーター(h),販売価格(円)';
+  const rows   = stockData.map(v => `${v.id},${v.maker},${v.model},${v.cap},${v.fuel},${v.year},${v.hours},${v.price}`);
+  downloadFile('自社在庫_' + today() + '.csv', '﻿' + [header,...rows].join('\r\n'), 'text/csv;charset=utf-8');
+}
+// ── CSV エクスポート（市場相場）──
+function exportMarketCSV() {
+  if (marketData.length === 0) { alert('市場データがありません。'); return; }
+  const header = 'メーカー,型式,積載能力(t),燃料(電動/エンジン),年式,アワーメーター(h),市場価格(円),出典';
+  const rows   = marketData.map(v => `${v.maker},${v.model||'-'},${v.cap},${v.fuel},${v.year},${v.hours},${v.price},${v.source||'-'}`);
+  downloadFile('市場相場_' + today() + '.csv', '﻿' + [header,...rows].join('\r\n'), 'text/csv;charset=utf-8');
+}
+
+// ── テンプレートDL（自社在庫）──
+function downloadTemplate() {
+  const content =
+    '管理番号,メーカー,型式,積載能力(t),燃料(電動/エンジン),年式,アワーメーター(h),販売価格(円)\r\n' +
+    '0001,トヨタ,8FB15,1.50,電動,2020,3000,1500000\r\n' +
+    '0002,コマツ,FD25T-17,2.50,エンジン,2019,5000,1800000\r\n';
+  downloadFile('自社在庫テンプレート.csv', '﻿' + content, 'text/csv;charset=utf-8');
+}
+// ── テンプレートDL（市場相場）──
+function downloadMarketTemplate() {
+  const content =
+    'メーカー,型式,積載能力(t),燃料(電動/エンジン),年式,アワーメーター(h),市場価格(円),出典\r\n' +
+    'トヨタ,8FB15,1.50,電動,2020,3000,1500000,Goo-net\r\n' +
+    'コマツ,FD25T-17,2.50,エンジン,2019,5000,1800000,Goo-net\r\n';
+  downloadFile('市場相場テンプレート.csv', '﻿' + content, 'text/csv;charset=utf-8');
+}
+
+// ── CSV インポート（自社在庫）──
+function importCSV(event) {
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      let text = e.target.result;
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      const lines = text.replace(/\r/g,'').split('\n').filter(l => l.trim());
+      if (lines.length < 2) { alert('データが見つかりません。'); return; }
+      const newStock = [];
+      for (let i = 1; i < lines.length; i++) {
+        const c = lines[i].split(',').map(s => s.trim().replace(/^"|"$/g,''));
+        if (c.length < 8) continue;
+        const price = parseInt(c[7].replace(/[^0-9]/g,''));
+        const cap = parseFloat(c[3]), year = parseInt(c[5]), hours = parseInt(c[6]);
+        if (!c[1] || isNaN(cap) || isNaN(year) || isNaN(hours) || isNaN(price)) continue;
+        newStock.push({ id:c[0]||String(i), maker:c[1], model:c[2], cap, fuel:c[4], year, hours, price });
+      }
+      if (newStock.length === 0) { alert('有効な行が見つかりません。\n列の順序やフォーマットを確認してください。'); return; }
+      if (!confirm(`${newStock.length}台のデータを読み込みます。\n現在のデータは上書きされます。よろしいですか？`)) return;
+      stockData = newStock; saveStock(); renderStockTable();
+      alert(`✅ ${newStock.length}台の在庫データを読み込みました。`);
+    } catch(err) { alert('読み込みエラー：' + err.message); }
+    event.target.value = '';
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+// ── CSV インポート（市場相場）──
+function importMarketCSV(event) {
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      let text = e.target.result;
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      const lines = text.replace(/\r/g,'').split('\n').filter(l => l.trim());
+      if (lines.length < 2) { alert('データが見つかりません。'); return; }
+      const newData = [];
+      for (let i = 1; i < lines.length; i++) {
+        const c = lines[i].split(',').map(s => s.trim().replace(/^"|"$/g,''));
+        if (c.length < 7) continue;
+        const price = parseInt(c[6].replace(/[^0-9]/g,''));
+        const cap = parseFloat(c[2]), year = parseInt(c[4]), hours = parseInt(c[5]);
+        if (!c[0] || isNaN(cap) || isNaN(year) || isNaN(hours) || isNaN(price)) continue;
+        newData.push({ maker:c[0], model:c[1]||'-', cap, fuel:c[3], year, hours, price, source:c[7]||'その他' });
+      }
+      if (newData.length === 0) { alert('有効な行が見つかりません。'); return; }
+      if (!confirm(`${newData.length}件の市場データを読み込みます。\n現在のデータは上書きされます。よろしいですか？`)) return;
+      marketData = newData; saveMarket(); renderMarketTable();
+      alert(`✅ ${newData.length}件の市場相場データを読み込みました。`);
+    } catch(err) { alert('読み込みエラー：' + err.message); }
+    event.target.value = '';
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function downloadFile(name, content, type) {
+  const blob = new Blob([content], {type});
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), {href:url, download:name});
+  a.click(); URL.revokeObjectURL(url);
+}
+function today() {
+  const d = new Date();
+  return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// ══════════════════════════════════════════════════════════
+// Phase 1: ボタン選択フィールド定義
+// ══════════════════════════════════════════════════════════
+const PHASE1_SECTIONS = [
+  { title:'車両情報', fields:[
+    { key:'maker',    label:'メーカー',  options:['トヨタ','コマツ','ニチユ','住友','ユニキャリア','三菱','BYD','その他'] },
+    { key:'fuel',     label:'燃料種別',  options:['LPG','ガソリン','ディーゼル','電動（バッテリー）'] },
+    { key:'forkType', label:'車両タイプ', options:['カウンター（バランス型）','リーチ（リーチフォーク）'] },
+    { key:'modelNum', label:'型式', type:'text', placeholder:'例：8FB15（不明の場合は空欄でも可）', optional:true },
+    { key:'capacity', label:'積載能力',  options:['1.0t以下','1.5t','2.0t','2.5t','3.0t','3.5t以上'] },
+  ]},
+  { title:'コンディション（A=良・B=普通・C=要対応）', fields:[
+    { key:'tire',   label:'タイヤ残量',       abc:true, options:['A：良好（70%以上）','B：普通（40〜69%）','C：要交換（39%以下）'] },
+    { key:'mast',   label:'マスト・爪',        abc:true, options:['A：変形・損傷なし','B：軽微な傷・摩耗あり','C：要補修・交換'] },
+    { key:'engine', label:'エンジン・モーター', abc:true, options:['A：異音・不具合なし','B：軽微な問題あり','C：要修理'] },
+    { key:'body',   label:'外装・車体',        abc:true, options:['A：きれい（小傷程度）','B：凹み・錆あり','C：著しく劣化'] },
+  ]},
+];
+const PHASE1_REQUIRED_KEYS = PHASE1_SECTIONS.flatMap(s => s.fields.filter(f=>!f.optional).map(f=>f.key));
+
+// ══════════════════════════════════════════════════════════
+// Phase 2: テキスト入力 + ボタン選択
+// ══════════════════════════════════════════════════════════
+const PHASE2_QUESTIONS = [
+  { key:'year',      type:'number', bot:'<b>年式（西暦）</b>を入力してください。', placeholder:'例：2018', suffix:'年', min:1980, max:2026, errorMsg:'1980〜2026 の値を入力してください' },
+  { key:'hours',     type:'number', bot:'<b>アワーメーター（稼働時間）</b>を入力してください。', placeholder:'例：2500', suffix:'時間', min:0, max:99999, errorMsg:'0以上の数値を入力してください' },
+  { key:'purchase',  type:'number', bot:'<b>仕入金額</b>を入力してください（円）。', placeholder:'例：500000', suffix:'円', min:0, max:99999999, errorMsg:'0以上の金額を入力してください' },
+  { key:'repair',    type:'number', bot:'<b>修理・整備費</b>を入力してください（円）。\n整備なしの場合は <b>0</b> と入力してください。', placeholder:'例：30000（なければ 0）', suffix:'円', min:0, max:99999999, errorMsg:'0以上の金額を入力してください' },
+  { key:'transport', type:'buttons', bot:'<b>搬送費</b>を選んでください。',
+    options:[{label:'なし（0円）',value:0},{label:'〜3万円',value:15000},{label:'3〜10万円',value:65000},{label:'10万円以上',value:150000}] },
+];
+// 買取査定では「仕入金額」は算出対象なので質問しない（販売モードのみ質問）
+function activeP2(){
+  return kaitoriMode ? PHASE2_QUESTIONS.filter(q => q.key !== 'purchase') : PHASE2_QUESTIONS;
+}
+
+let p2step=0, ans={}, ansLabel={};
+const chat      = document.getElementById('chat');
+const inputArea = document.getElementById('inputArea');
+const fmt       = n => '¥ ' + Math.round(n).toLocaleString();
+const scrollBottom = () => setTimeout(()=>{ chat.scrollTop=chat.scrollHeight; },60);
+const optLabel = o => typeof o==='string'?o:o.label;
+const optValue = o => typeof o==='string'?o:o.value;
+
+function setProgress(cur,total,label){
+  document.getElementById('progressFill').style.width = total>0?Math.min(cur/total*100,100)+'%':'0%';
+  document.getElementById('progressLabel').textContent = label||'';
+}
+function addBotBubble(html){ const w=document.createElement('div'); w.className='msg bot'; w.innerHTML=`<div class="avatar">🤖</div><div class="bubble">${html}</div>`; chat.appendChild(w); scrollBottom(); }
+function addUserBubble(html){ const w=document.createElement('div'); w.className='msg user'; w.innerHTML=`<div class="avatar">👤</div><div class="bubble">${html}</div>`; chat.appendChild(w); scrollBottom(); }
+function showTyping(){ const w=document.createElement('div'); w.className='msg bot'; w.id='typing'; w.innerHTML=`<div class="avatar">🤖</div><div class="bubble typing"><span></span><span></span><span></span></div>`; chat.appendChild(w); scrollBottom(); }
+function removeTyping(){ const e=document.getElementById('typing'); if(e) e.remove(); }
+
+// ── Phase 1 ──
+function renderPhase1() {
+  setProgress(0,1,'Step 1 / 2　車両情報を選択');
+  setTimeout(()=>{
+    addBotBubble('こんにちは！<b>車両情報とコンディション</b>をまとめて選択してください。');
+    const card=document.createElement('div'); card.className='form-card'; card.id='phase1-form';
+    PHASE1_SECTIONS.forEach(section=>{
+      const sec=document.createElement('div'); sec.className='form-section-title'; sec.textContent=section.title; card.appendChild(sec);
+      section.fields.forEach(field=>{
+        const fd=document.createElement('div'); fd.className='form-field';
+        const opt=field.optional?'<span class="optional-badge">任意</span>':'';
+        const dot=field.optional?'': `<span class="req-dot" id="dot-${field.key}"></span>`;
+        const lbl=document.createElement('div'); lbl.className='form-field-label'; lbl.innerHTML=`${dot}${field.label}${opt}`; fd.appendChild(lbl);
+        if(field.type==='text'){
+          const inp=document.createElement('input'); inp.className='form-text-input'; inp.type='text'; inp.placeholder=field.placeholder||'';
+          inp.addEventListener('input',()=>{ ans[field.key]=inp.value.trim(); ansLabel[field.key]=inp.value.trim(); });
+          fd.appendChild(inp);
+        } else {
+          const grp=document.createElement('div'); grp.className='form-btn-group';
+          field.options.forEach(opt=>{
+            const btn=document.createElement('button'); btn.className='form-btn'; btn.textContent=optLabel(opt);
+            btn.dataset.key=field.key; btn.dataset.opt=optLabel(opt);
+            btn.onclick=()=>{
+              card.querySelectorAll(`[data-key="${field.key}"]`).forEach(b=>b.classList.remove('selected','sel-a','sel-b','sel-c'));
+              if(field.abc){ const r=optLabel(opt).charAt(0); btn.classList.add(r==='A'?'sel-a':r==='B'?'sel-b':'sel-c'); }
+              else btn.classList.add('selected');
+              ans[field.key]=optValue(opt); ansLabel[field.key]=optLabel(opt);
+              const d=document.getElementById(`dot-${field.key}`); if(d) d.className='ok-dot';
+              if(field.key==='fuel') syncForkType(optLabel(opt));
+              updatePhase1Next();
+            };
+            grp.appendChild(btn);
+          });
+          fd.appendChild(grp);
+        }
+        card.appendChild(fd);
+      });
+    });
+    const footer=document.createElement('div'); footer.className='form-footer';
+    const txt=document.createElement('div'); txt.className='form-footer-text'; txt.id='phase1-txt'; txt.textContent='0 / 9 選択済み';
+    const nxt=document.createElement('button'); nxt.className='form-next-btn disabled'; nxt.id='phase1-next'; nxt.textContent='次へ → 費用を入力';
+    nxt.onclick=()=>{ if(PHASE1_REQUIRED_KEYS.every(k=>ans[k]!==undefined)) submitPhase1(card); };
+    footer.appendChild(txt); footer.appendChild(nxt); card.appendChild(footer);
+    const wrap=document.createElement('div'); wrap.style.cssText='width:100%;align-self:stretch;padding:0 0 4px'; wrap.appendChild(card);
+    chat.appendChild(wrap); scrollBottom();
+  },400);
+}
+
+function updatePhase1Next(){
+  const done=PHASE1_REQUIRED_KEYS.filter(k=>ans[k]!==undefined).length;
+  const total=PHASE1_REQUIRED_KEYS.length;
+  const txt=document.getElementById('phase1-txt'); if(txt) txt.textContent=`${done} / ${total} 選択済み`;
+  const btn=document.getElementById('phase1-next'); if(btn) btn.className='form-next-btn '+(done===total?'ready':'disabled');
+}
+
+function syncForkType(fuelLabel){
+  const isElec=fuelLabel==='電動（バッテリー）';
+  const rb=document.querySelector('[data-key="forkType"][data-opt^="リーチ"]');
+  if(!rb) return;
+  if(!isElec){
+    rb.style.display='none';
+    if(ans.forkType&&ans.forkType.includes('リーチ')){
+      rb.classList.remove('selected'); delete ans.forkType; delete ansLabel.forkType;
+      const d=document.getElementById('dot-forkType'); if(d) d.className='req-dot';
+      updatePhase1Next();
+    }
+  } else { rb.style.display=''; }
+}
+
+function submitPhase1(card){
+  card.querySelectorAll('.form-btn,.form-next-btn').forEach(b=>b.style.pointerEvents='none');
+  const n=card.querySelector('#phase1-next'); if(n) n.style.display='none';
+  const cond=['tire','mast','engine','body'].map(k=>ansLabel[k].charAt(0)).join('/');
+  const mdl=ans.modelNum?`　型式：${ans.modelNum}`:'';
+  addUserBubble(`${ansLabel.maker}｜${ansLabel.forkType}｜${ansLabel.capacity}｜${ansLabel.fuel}${mdl}<br><span style="font-size:12px;opacity:.85">コンディション（タイヤ/マスト/エンジン/外装）：${cond}</span>`);
+  setTimeout(()=>startPhase2(),400);
+}
+
+// ── Phase 2 ──
+function startPhase2(){
+  p2step=0; inputArea.style.display='';
+  setProgress(0,activeP2().length,`Step 2 / 2　費用を入力　0 / ${activeP2().length}`);
+  showTyping();
+  setTimeout(()=>{ removeTyping(); addBotBubble('ありがとうございます！続いて<b>年式・アワー・費用</b>を入力してください。'); setTimeout(()=>renderP2(),300); },500);
+}
+
+function renderP2(){
+  const qs=activeP2();
+  if(p2step>=qs.length){ showResult(); return; }
+  const q=qs[p2step];
+  setProgress(p2step,qs.length,`Step 2 / 2　費用を入力　${p2step} / ${qs.length}`);
+  showTyping();
+  setTimeout(()=>{
+    removeTyping(); addBotBubble(q.bot.replace(/\n/g,'<br>')); inputArea.innerHTML='';
+    if(q.type==='buttons'){
+      const grp=document.createElement('div'); grp.className='btn-group';
+      q.options.forEach(o=>{
+        const btn=document.createElement('button'); btn.className='choice-btn'; btn.textContent=optLabel(o);
+        btn.onclick=()=>{ inputArea.innerHTML=''; addUserBubble(optLabel(o)); ans[q.key]=optValue(o); ansLabel[q.key]=optLabel(o); p2step++; renderP2(); };
+        grp.appendChild(btn);
+      });
+      inputArea.appendChild(grp);
+    } else {
+      const row=document.createElement('div'); row.className='text-row';
+      const inp=document.createElement('input'); inp.className='text-input'; inp.type='text'; inp.inputMode='numeric'; inp.placeholder=q.placeholder;
+      const btn=document.createElement('button'); btn.className='go-btn'; btn.textContent=p2step<qs.length-1?'次へ →':'価格を算定 →';
+      const submit=()=>{
+        const raw=inp.value.trim().replace(/[,，]/g,''); const num=Number(raw);
+        if(raw===''||isNaN(num)||num<q.min||num>q.max){ inp.classList.add('error'); inp.placeholder=q.errorMsg; inp.value=''; inp.focus(); return; }
+        inputArea.innerHTML=''; addUserBubble(num.toLocaleString()+' '+q.suffix);
+        ans[q.key]=num; ansLabel[q.key]=num.toLocaleString()+' '+q.suffix; p2step++; renderP2();
+      };
+      btn.onclick=submit; inp.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); }); inp.addEventListener('input',()=>inp.classList.remove('error'));
+      row.appendChild(inp); row.appendChild(btn); inputArea.appendChild(row);
+      setTimeout(()=>inp.focus(),80);
+    }
+    scrollBottom();
+  },480);
+}
+
+// ══════════════════════════════════════════════════════════
+// 計算ロジック
+// ══════════════════════════════════════════════════════════
+function getCapNum(){ return {'1.0t以下':.9,'1.5t':1.5,'2.0t':2,'2.5t':2.5,'3.0t':3,'3.5t以上':3.5}[ans.capacity]||1.5; }
+function getFuelGroup(){ return ans.fuel==='電動（バッテリー）'?'電動':'エンジン'; }
+function getCondition(){
+  const age=2026-ans.year, rH=ans.hours<=3000?'A':ans.hours<=6000?'B':'C', rY=age<=5?'A':age<=10?'B':'C';
+  const ranks=[rH,rY,ans.tire[0],ans.mast[0],ans.engine[0],ans.body[0]];
+  const aC=ranks.filter(r=>r==='A').length, cC=ranks.filter(r=>r==='C').length;
+  if(aC>=4&&cC===0) return{key:'S',label:'S（優良）', coeff:1.10};
+  if(cC>=2)         return{key:'B',label:'B（要注意）',coeff:0.85};
+  return               {key:'A',label:'A（標準）', coeff:1.00};
+}
+function estCoeff(y,h){ const a=2026-y,rH=h<=3000?1.1:h<=6000?1:0.85,rY=a<=5?1.1:a<=10?1:0.85; return(rH+rY)/2; }
+
+function getSimilar(cap,fg){
+  return stockData
+    .map(v=>{ const d=Math.abs(v.cap-cap); if(v.fuel!==fg||d>0.75) return null;
+      const s=(1-d/.75)*.5+Math.max(0,1-Math.abs(v.year-ans.year)/10)*.25+Math.max(0,1-Math.abs(v.hours-ans.hours)/12000)*.25;
+      return{...v,score:s}; })
+    .filter(v=>v&&v.score>.08).sort((a,b)=>b.score-a.score).slice(0,3);
+}
+function getMarketSimilar(cap,fg){
+  return marketData
+    .map(v=>{ const d=Math.abs(v.cap-cap); if(v.fuel!==fg||d>0.75) return null;
+      const s=(1-d/.75)*.5+Math.max(0,1-Math.abs(v.year-ans.year)/10)*.25+Math.max(0,1-Math.abs(v.hours-ans.hours)/12000)*.25;
+      return{...v,score:s}; })
+    .filter(v=>v&&v.score>.08).sort((a,b)=>b.score-a.score).slice(0,3);
+}
+
+function detectAnomalies(sim,floor){
+  const al=[];
+  if(!sim.length) return al;
+  const ps=sim.map(v=>v.price), mx=Math.max(...ps), mn=Math.min(...ps), mean=ps.reduce((a,b)=>a+b,0)/ps.length;
+  if(sim.length>=2&&mx>mn*2.5){ const o=sim.find(v=>v.price===mx)||sim[0]; al.push({level:'warn',msg:`⚠️ 類似在庫の価格に大きなばらつきがあります（${fmt(mn)}〜${fmt(mx)}）。No.${o.id}（${fmt(o.price)}）の価格を確認してください。`}); }
+  for(let i=0;i<sim.length;i++) for(let j=i+1;j<sim.length;j++){
+    const a=sim[i],b=sim[j];
+    if(a.year>=b.year&&a.hours<=b.hours&&a.price<b.price*.7) al.push({level:'warn',msg:`⚠️ No.${a.id}（${a.year}年・${a.hours.toLocaleString()}h・${fmt(a.price)}）は No.${b.id} より状態が良いのに価格が低くなっています。`});
+  }
+  if(mean<floor) al.push({level:'error',msg:`🚨 類似在庫の平均価格（${fmt(mean)}）が今回の最低ライン（${fmt(floor)}）を下回っています。在庫価格の見直しを検討してください。`});
+  return al;
+}
+
+function calcAll(){
+  const tc=ans.purchase+ans.repair+ans.transport, cond=getCondition(), cap=getCapNum(), fg=getFuelGroup();
+  const sim=getSimilar(cap,fg), msim=getMarketSimilar(cap,fg), floor=Math.round(tc*1.15/10000)*10000, an=detectAnomalies(sim,floor);
+  const cb=Math.round(tc*1.30*cond.coeff/10000)*10000;
+  let sb=null,conf=0,rows=[];
+  if(sim.length){ const adj=sim.map(v=>({...v,adjPrice:v.price*(cond.coeff/estCoeff(v.year,v.hours))}));
+    const tw=adj.reduce((s,v)=>s+v.score,0); sb=Math.round(adj.reduce((s,v)=>s+v.adjPrice*v.score,0)/tw/10000)*10000; conf=Math.min(sim[0].score,1); rows=adj; }
+  let rec,wl;
+  if(sb!==null&&conf>=.6){rec=sb*.8+cb*.2;wl='自社在庫 80% ／ 原価算定 20%';}
+  else if(sb!==null&&conf>=.3){rec=sb*.55+cb*.45;wl='自社在庫 55% ／ 原価算定 45%';}
+  else if(sb!==null){rec=sb*.3+cb*.7;wl='原価算定 70% ／ 自社在庫 30%（類似度低）';}
+  else{rec=cb;wl='原価算定のみ（自社在庫なし）';}
+  const rc=(ans.forkType||'').includes('リーチ')?1.05:1;
+  rec=Math.max(Math.round(rec*rc/10000)*10000,floor);
+  const mg=tc>0?Math.round((1-tc/rec)*100):0;
+  return{tc,cb,sb,rec,floor,rL:Math.round(rec*.92/10000)*10000,rH:Math.round(rec*1.08/10000)*10000,mg,cond,cp:Math.round(conf*100),wl,sim,msim,rows,an,rc};
+}
+
+// ══════════════════════════════════════════════════════════
+// オークション相場 CRUD
+// ══════════════════════════════════════════════════════════
+function renderAuctionTable() {
+  const tbody  = document.getElementById('auction-tbody');
+  const cntEl  = document.getElementById('auction-count');
+  const updEl  = document.getElementById('auction-updated');
+  cntEl.textContent = `登録件数：${auctionData.length}件`;
+  const upd = localStorage.getItem(AUCTION_UPDATED_KEY);
+  updEl.textContent = upd ? `最終更新：${upd}` : '落札データ未登録';
+  tbody.innerHTML = '';
+  const cutoff = new Date(); cutoff.setFullYear(cutoff.getFullYear()-1);
+  const recent = auctionData.filter(v => !v.date || new Date(v.date) >= cutoff);
+  const sorted = [...auctionData].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  sorted.forEach((v,i) => {
+    const old = v.date && new Date(v.date) < cutoff;
+    const tr = document.createElement('tr');
+    if (old) tr.style.opacity = '.5';
+    tr.innerHTML = `<td>${v.maker||'-'}</td><td>${v.model||'-'}</td><td>${v.cap||'-'}</td><td>${v.fuel||'-'}</td><td>${v.year||'-'}</td><td>${(v.hours||0).toLocaleString()}</td><td>${fmt(v.price)}</td><td><span class="auction-grade">${v.grade||'-'}</span></td><td style="font-size:11px;opacity:.7">${v.date||'-'}</td><td><button onclick="removeAuction(${i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+function removeAuction(i) { auctionData.splice(i,1); saveAuction(); renderAuctionTable(); }
+function addAuctionVehicle() {
+  const v = {
+    maker: document.getElementById('auc-maker').value.trim(),
+    model: document.getElementById('auc-model').value.trim()||'-',
+    cap:   parseFloat(document.getElementById('auc-cap').value)||0,
+    fuel:  document.getElementById('auc-fuel').value,
+    year:  parseInt(document.getElementById('auc-year').value)||0,
+    hours: parseInt(document.getElementById('auc-hours').value)||0,
+    price: parseInt(document.getElementById('auc-price').value)||0,
+    grade: document.getElementById('auc-grade').value.trim(),
+    date:  document.getElementById('auc-date').value,
+  };
+  if (!v.maker||!v.price) { alert('メーカーと落札価格は必須です'); return; }
+  auctionData.push(v); saveAuction(); renderAuctionTable();
+  ['auc-maker','auc-model','auc-cap','auc-year','auc-hours','auc-price','auc-grade','auc-date'].forEach(id => document.getElementById(id).value='');
+}
+function downloadAuctionTemplate() {
+  const content = 'メーカー,型式,積載能力(t),燃料(電動/エンジン),年式,アワーメーター(h),落札価格(円),グレード,落札日\r\n' +
+    'トヨタ,8FB15,1.5,電動,2020,3500,750000,B,2025/10/15\r\n' +
+    'トヨタ,7FBR15,1.5,電動,2018,5200,580000,C,2025/09/20\r\n';
+  const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(content);
+  a.download='auction_template.csv'; a.click();
+}
+function exportAuctionCSV() {
+  if (!auctionData.length) { alert('データがありません'); return; }
+  const rows = ['メーカー,型式,積載能力(t),燃料,年式,アワー,落札価格,グレード,落札日'];
+  auctionData.forEach(v => rows.push([v.maker,v.model,v.cap,v.fuel,v.year,v.hours,v.price,v.grade||'',v.date||''].join(',')));
+  const a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,﻿'+encodeURIComponent(rows.join('\r\n'));
+  a.download='auction_data.csv'; a.click();
+}
+function importAuctionCSV(event) {
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result.replace(/^﻿/,'');
+    const lines = text.split(/\r?\n/).filter(l=>l.trim());
+    if (lines.length < 2) { alert('データが見つかりません'); return; }
+    const headers = lines[0].split(',').map(h=>h.trim());
+    // 柔軟なカラムマッピング
+    const fi = k => headers.findIndex(h => h.match(k));
+    const iMaker  = fi(/メーカー|maker/i);
+    const iModel  = fi(/型式|model/i);
+    const iCap    = fi(/積載|荷重|cap/i);
+    const iFuel   = fi(/燃料|fuel/i);
+    const iYear   = fi(/年式|year/i);
+    const iHours  = fi(/アワー|時間|hour/i);
+    const iPrice  = fi(/落札|価格|price/i);
+    const iGrade  = fi(/グレード|grade|評価/i);
+    const iDate   = fi(/日付|日$|date/i);
+    const nowY = new Date().getFullYear();
+    const cutoff = nowY - 1; // 直近1年
+    let count = 0;
+    lines.slice(1).forEach(line => {
+      const cols = line.split(',').map(c=>c.trim().replace(/^"|"$/g,''));
+      const year = parseInt(cols[iYear])||0;
+      const price= parseInt((cols[iPrice]||'').replace(/[^\d]/g,''))||0;
+      if (!price) return;
+      const dateStr = iDate>=0 ? cols[iDate] : '';
+      const dateY   = dateStr ? new Date(dateStr.replace(/\//g,'-')).getFullYear() : nowY;
+      if (dateY < cutoff) return; // 1年以上前は除外
+      const fuelRaw = iFuel>=0 ? cols[iFuel] : '';
+      const fuel = fuelRaw.match(/バッテリー|電動|EV/i) ? '電動' : 'エンジン';
+      auctionData.push({
+        maker: iMaker>=0 ? cols[iMaker] : '',
+        model: iModel>=0 ? cols[iModel] : '-',
+        cap:   iCap>=0   ? parseFloat((cols[iCap]||'').replace(/[^0-9.]/g,''))||0 : 0,
+        fuel,
+        year,
+        hours: iHours>=0 ? parseInt((cols[iHours]||'').replace(/[^\d]/g,''))||0 : 0,
+        price,
+        grade: iGrade>=0 ? cols[iGrade] : '',
+        date:  dateStr,
+      });
+      count++;
+    });
+    saveAuction(); renderAuctionTable();
+    alert(`${count}件のオークションデータを取り込みました。`);
+  };
+  reader.readAsText(file, 'UTF-8');
+  event.target.value='';
+}
+
+// ── 類似オークション検索 ──
+function getAuctionSimilar(cap, fuel) {
+  const nowY = new Date().getFullYear();
+  const cutoff = new Date(); cutoff.setFullYear(nowY-1);
+  const candidates = auctionData.filter(v => {
+    if (v.date && new Date(v.date) < cutoff) return false; // 1年以上前は除外
+    const fuelOk  = v.fuel === fuel;
+    const capDiff = Math.abs(v.cap - cap);
+    const capOk   = capDiff <= cap * 0.4;
+    return fuelOk && capOk;
+  });
+  return candidates.map(v => {
+    const capScore  = Math.max(0, 1 - Math.abs(v.cap-cap)/(cap*0.5));
+    const yearScore = ans.year ? Math.max(0, 1 - Math.abs(v.year-ans.year)/5) : 0.5;
+    const hourScore = ans.hours ? Math.max(0, 1 - Math.abs(v.hours-ans.hours)/10000) : 0.5;
+    return { ...v, score: capScore*0.5+yearScore*0.25+hourScore*0.25 };
+  }).filter(v=>v.score>0.2).sort((a,b)=>b.score-a.score).slice(0,10);
+}
+
+// ══════════════════════════════════════════════════════════
+// 買取査定モード
+// ══════════════════════════════════════════════════════════
+function toggleKaitoriMode() {
+  kaitoriMode = !kaitoriMode;
+  const btn   = document.getElementById('kaitori-toggle');
+  const title = document.getElementById('app-mode-title');
+  if (kaitoriMode) {
+    btn.textContent = '📊 販売価格算定へ戻る';
+    btn.style.background = 'rgba(255,255,255,.2)';
+    title.textContent = '🔨 フォークリフト 買取査定';
+  } else {
+    btn.textContent = '🔨 買取査定';
+    btn.style.background = '';
+    title.textContent = 'フォークリフト 販売価格算定';
+  }
+  location.reload(); // チャットリセット
+}
+
+function calcKaitori() {
+  const cap  = getCapNum();
+  const fuel = getFuelGroup();
+  const auc  = getAuctionSimilar(cap, fuel);
+  const mkt  = getMarketSimilar(cap, fuel);
+
+  // 買取上限計算
+  const repair    = ans.repair    || 0;
+  const transport = ans.transport || 0;
+  const margin    = 0.30; // 目標粗利30%
+
+  let refPrice = 0, refLabel = '';
+
+  if (auc.length >= 2) {
+    const aucAvg = Math.round(auc.map(v=>v.price).reduce((a,b)=>a+b,0)/auc.length);
+    refPrice = aucAvg; refLabel = `オークション平均 ${fmt(aucAvg)}（${auc.length}件）`;
+  } else if (mkt.length >= 3) {
+    const mktAvg = Math.round(mkt.map(v=>v.price).reduce((a,b)=>a+b,0)/mkt.length);
+    refPrice = Math.round(mktAvg * 0.75); // 市場販売価格の75%をオークション相場と推定
+    refLabel = `市場販売価格から推定 ${fmt(mktAvg)}×75%`;
+  }
+
+  const upperBuy  = refPrice > 0 ? Math.round((refPrice - repair - transport) / (1+margin) / 10000) * 10000 : 0;
+  const lowerBuy  = Math.round(upperBuy * 0.85 / 10000) * 10000;
+  const targetSell = Math.round(upperBuy * (1+margin) + repair + transport);
+
+  return { auc, mkt, refPrice, refLabel, upperBuy, lowerBuy, targetSell, repair, transport, margin };
+}
+
+function showKaitoriResult() {
+  const r = calcKaitori();
+  const auc = r.auc;
+
+  let aucH = '';
+  if (auc.length > 0) {
+    const rows = auc.map(v => {
+      const c = v.score>=.6?'#34d399':v.score>=.3?'#fbbf24':'#f87171';
+      return `<div class="sim-row"><div style="font-size:12px;opacity:.88;flex:1">${v.maker} ${v.model||''}<br><span style="opacity:.65;font-size:11px">${v.cap}t・${v.year}年・${v.hours.toLocaleString()}h${v.grade?'・グレード:'+v.grade:''}</span></div><div style="text-align:right"><div style="font-weight:700">${fmt(v.price)}</div><div style="font-size:10px;opacity:.6;color:${c}">類似度 ${Math.round(v.score*100)}%</div></div></div>`;
+    }).join('');
+    const aucAvg = Math.round(auc.map(v=>v.price).reduce((a,b)=>a+b,0)/auc.length);
+    aucH = `<div class="panel"><div class="panel-title">🔨 類似オークション落札実績（直近1年・${auc.length}件）</div>${rows}<div style="margin-top:8px;font-size:11px;opacity:.75;border-top:1px solid rgba(255,255,255,.15);padding-top:7px">落札平均：<b>${fmt(aucAvg)}</b></div></div>`;
+  } else {
+    aucH = `<div class="alert alert-info">ℹ️ 類似オークションデータが未登録です。📋在庫管理 → 🔨オークション相場 からCSVを取り込んでください。<br>市場販売価格（${r.mkt.length}件）から推定値を算出しています。</div>`;
+  }
+
+  const w = document.createElement('div');
+  w.className = 'msg bot'; w.style.maxWidth='99%'; w.style.width='100%';
+  w.innerHTML = `<div class="avatar">🤖</div><div class="result-wrap"><div class="result-card">
+    <div class="kaitori-result">
+      <div class="kaitori-price-label">推奨買取価格（上限）</div>
+      <div class="kaitori-price-main">${r.upperBuy > 0 ? fmt(r.upperBuy) : '参考データ不足'}</div>
+      ${r.upperBuy > 0 ? `<div class="kaitori-price-range">安全ライン：${fmt(r.lowerBuy)} 〜 ${fmt(r.upperBuy)}</div>` : ''}
+    </div>
+    ${r.upperBuy > 0 ? `
+    <div class="panel">
+      <div class="panel-title">📊 買取価格の根拠</div>
+      <div class="kaitori-row"><span>参考相場</span><span style="font-size:11px;opacity:.8">${r.refLabel}</span></div>
+      <div class="kaitori-row"><span>修理・整備見積</span><span>${fmt(r.repair)}</span></div>
+      <div class="kaitori-row"><span>搬送費</span><span>${fmt(r.transport)}</span></div>
+      <div class="kaitori-row"><span>目標粗利（${Math.round(r.margin*100)}%）</span><span>${fmt(Math.round(r.refPrice*r.margin))}</span></div>
+      <div class="kaitori-row" style="font-weight:700;border-top:1px solid rgba(255,255,255,.3);margin-top:4px;padding-top:8px"><span>推定販売価格</span><span>${fmt(r.targetSell)}</span></div>
+    </div>` : ''}
+    ${aucH}
+    <div class="alert alert-info" style="margin-top:10px;font-size:11px">
+      💡 エンドユーザーからの買取はオークション相場より<b>5〜15%高め</b>が目安（手数料分）。<br>
+      コンディションが良好（B以上）なら上限に近い価格でも取引可能です。
+    </div>
+    <div class="panel" style="margin-top:8px">
+      <div class="panel-title">💴 費用内訳</div>
+      <div class="kaitori-row"><span>修理・整備見積</span><span>${fmt(r.repair)}</span></div>
+      <div class="kaitori-row"><span>搬送費</span><span>${fmt(r.transport)}</span></div>
+    </div>
+    <button class="restart-btn" onclick="location.reload()">🔄 別の車両を査定する</button>
+  </div></div>`;
+  chat.appendChild(w); scrollBottom();
+}
+
+// ══════════════════════════════════════════════════════════
+// AIアドバイス生成（ルールベース）
+// ══════════════════════════════════════════════════════════
+function generateAdvice(r) {
+  const nowY = 2026;
+  const year  = ans.year  || nowY - 5;
+  const hours = ans.hours || 5000;
+  const age   = nowY - year;
+  const fuel  = getFuelGroup();
+  const cap   = getCapNum();
+
+  const hpSim  = r.msim.filter(v => v.source === '自社HP');
+  const mktSim = r.msim.filter(v => v.source !== '自社HP');
+
+  // ① 価格評価（競合相場比）
+  let priceEval = '';
+  let negL = r.rL, negH = Math.round(r.rec * 1.08 / 10000) * 10000;
+  if (mktSim.length >= 2) {
+    const mAvg = Math.round(mktSim.map(v=>v.price).reduce((a,b)=>a+b,0)/mktSim.length);
+    const pct  = Math.round((r.rec - mAvg) / mAvg * 100);
+    if      (pct >= 15) priceEval = `競合市場より<b>${pct}%高め</b>の設定です。品質・整備状況を明確にアピールすることで正当化できます。`;
+    else if (pct >=  5) priceEval = `競合市場より<b>やや高め（+${pct}%）</b>。独自の強みで差別化できれば成約見込みあり。`;
+    else if (pct <= -15) priceEval = `競合市場より<b>${Math.abs(pct)}%割安</b>な設定です。需要が高い場合は値上げ余地があります。`;
+    else if (pct <= -5)  priceEval = `競合市場より<b>やや割安（${Math.abs(pct)}%）</b>。比較的成約しやすい価格帯です。`;
+    else                 priceEval = `競合市場と<b>ほぼ同水準</b>の適正価格です。`;
+    negL = Math.max(r.rL, Math.round(mAvg * 0.93 / 10000) * 10000);
+    negH = Math.round(mAvg * 1.05 / 10000) * 10000;
+  } else if (mktSim.length === 1) {
+    const pct = Math.round((r.rec - mktSim[0].price) / mktSim[0].price * 100);
+    priceEval = `市場参考1件：${fmt(mktSim[0].price)} に対して${pct>=0?'+':''}${pct}%の設定です。`;
+  } else {
+    priceEval = `市場データが少ないため、自社在庫ベースの算定を参考にしてください。`;
+  }
+
+  const lines = [];
+
+  // ② 自社HP比較
+  if (hpSim.length > 0) {
+    const hpAvg = Math.round(hpSim.map(v=>v.price).reduce((a,b)=>a+b,0)/hpSim.length);
+    const hpPct = Math.round((r.rec - hpAvg) / hpAvg * 100);
+    if (Math.abs(hpPct) >= 5) {
+      lines.push(`自社HP掲載の類似車両（${hpSim.length}台、平均 ${fmt(hpAvg)}）と比べ${hpPct>0?'+':''}${hpPct}%。HP掲載価格との整合性を確認してください。`);
+    } else {
+      lines.push(`自社HP掲載の類似車両（${hpSim.length}台、平均 ${fmt(hpAvg)}）とほぼ同水準です。`);
+    }
+  }
+
+  // ③ 信頼度
+  if      (r.cp >= 70) lines.push('類似在庫が豊富で信頼度の高い算定です。');
+  else if (r.cp >= 40) lines.push('参照データは中程度。市場動向も確認してください。');
+  else                 lines.push('類似データが少なく原価ベース中心の算定です。市場相場も参考に。');
+
+  // ④ 年式
+  if      (age <= 2)  lines.push(`年式${year}年（${age}年落ち）は新しく高い訴求力があります。`);
+  else if (age <= 5)  lines.push(`年式${year}年（${age}年落ち）は中古市場で人気の年式帯です。`);
+  else if (age <= 10) lines.push(`年式${year}年（${age}年落ち）。メンテナンス記録があれば安心感を訴求できます。`);
+  else                lines.push(`年式${year}年（${age}年落ち）のベテラン車両。整備実績・安定稼働実績を強調しましょう。`);
+
+  // ⑤ アワー
+  if      (hours < 2000)  lines.push(`アワー${hours.toLocaleString()}hは超低アワーで大きな訴求ポイントです。`);
+  else if (hours < 5000)  lines.push(`アワー${hours.toLocaleString()}hは少なめで良好な状態が期待できます。`);
+  else if (hours < 10000) lines.push(`アワー${hours.toLocaleString()}hは標準的な使用域です。`);
+  else                    lines.push(`アワー${hours.toLocaleString()}hは高め。整備歴・部品交換実績の提示が重要です。`);
+
+  // ⑥ 訴求ポイント
+  const points = [];
+  if (hours < 3000)   points.push('低アワー');
+  if (age <= 5)       points.push('比較的新しい年式');
+  if (fuel === '電動') points.push('排気ガスなし・屋内作業OK');
+  else                points.push('屋外作業対応・高出力');
+  if (cap >= 3.0)     points.push('大積載（3t超）');
+  else if (cap >= 2.0) points.push('中型クラス（2t台）');
+  else                points.push('標準クラス（1〜2t）');
+
+  return { priceEval, lines, points, negL, negH };
+}
+
+// ══════════════════════════════════════════════════════════
+// 結果表示
+// ══════════════════════════════════════════════════════════
+function showResult(){
+  inputArea.style.display='none'; setProgress(1,1,'');
+  // 買取モードなら買取査定結果を表示
+  if (kaitoriMode) {
+    showTyping(); setTimeout(()=>{removeTyping();addBotBubble('情報が揃いました！買取査定を計算しています…');},400);
+    setTimeout(()=>showKaitoriResult(), 1500);
+    return;
+  }
+  showTyping(); setTimeout(()=>{removeTyping();addBotBubble('すべての情報が揃いました！計算しています…');},400);
+  setTimeout(()=>{
+    const r=calcAll();
+
+    // 自社在庫パネル
+    let simH='';
+    if(r.rows.length){
+      const rs=r.rows.map(v=>{ const c=v.score>=.6?'#34d399':v.score>=.3?'#fbbf24':'#f87171';
+        return`<div class="sim-row"><div style="font-size:12px;opacity:.88;flex:1">No.${v.id}｜${v.maker} ${v.model}<br><span style="opacity:.65;font-size:11px">${v.cap}t・${v.year}年・${v.hours.toLocaleString()}h</span></div><div style="text-align:right"><div style="font-weight:700">${fmt(v.price)}</div><div style="font-size:10px;opacity:.6;color:${c}">一致度 ${Math.round(v.score*100)}%</div></div></div>`; }).join('');
+      const cc=r.cp>=60?'#34d399':r.cp>=30?'#fbbf24':'#f87171';
+      simH=`<div class="panel"><div class="panel-title">🏭 参照した自社類似在庫（${r.rows.length}台）</div>${rs}<div style="margin-top:8px;font-size:11px;opacity:.65">最高一致度：${r.cp}%<div class="conf-bar-wrap"><div class="conf-bar-fill" style="width:${r.cp}%;background:${cc}"></div></div></div></div>`;
+    } else {
+      simH=`<div class="alert alert-info">ℹ️ 燃料・積載能力が近い自社在庫が見つかりませんでした。原価ベースの算定のみを表示しています。</div>`;
+    }
+
+    // 市場相場パネル
+    let marketH='';
+    if(r.msim.length){
+      const mrs=r.msim.map(v=>{ const c=v.score>=.6?'#34d399':v.score>=.3?'#fbbf24':'#f87171';
+        return`<div class="sim-row"><div style="font-size:12px;opacity:.88;flex:1">${v.maker} ${v.model||''}<br><span style="opacity:.65;font-size:11px">${v.cap}t・${v.year}年・${v.hours.toLocaleString()}h・${v.source||'-'}</span></div><div style="text-align:right"><div style="font-weight:700">${fmt(v.price)}</div><div style="font-size:10px;opacity:.6;color:${c}">類似度 ${Math.round(v.score*100)}%</div></div></div>`; }).join('');
+      const mPrices=r.msim.map(v=>v.price), mAvg=Math.round(mPrices.reduce((a,b)=>a+b,0)/mPrices.length);
+      const mUpd=localStorage.getItem(MARKET_UPDATED_KEY)||'2026年6月';
+      marketH=`<div class="panel"><div class="panel-title">🌐 市場相場参考（${r.msim.length}件）<span style="font-size:10px;opacity:.6;margin-left:6px">更新：${mUpd}</span></div>${mrs}<div style="margin-top:8px;font-size:11px;opacity:.75;border-top:1px solid rgba(255,255,255,.15);padding-top:7px">市場平均価格：<b>${fmt(mAvg)}</b>　自社推奨：<b>${fmt(r.rec)}</b>　差額：${r.rec>mAvg?'+':''}${fmt(r.rec-mAvg)}</div></div>`;
+    }
+
+    // AIアドバイスパネル
+    const adv = generateAdvice(r);
+    const advH = `<div class="panel ai-advice">
+      <div class="panel-title">💡 AIアドバイス <span class="hp-badge">自社HP参照</span></div>
+      <div class="adv-eval">${adv.priceEval}</div>
+      <div class="adv-lines">${adv.lines.join('<br>')}</div>
+      <div class="adv-footer">
+        <div class="adv-row">▶ 推奨交渉ライン：<b>${fmt(adv.negL)} 〜 ${fmt(adv.negH)}</b></div>
+        <div class="adv-row">▶ 訴求ポイント：<b>${adv.points.join('・')}</b></div>
+      </div>
+    </div>`;
+
+    const alH=r.an.map(a=>`<div class="alert ${a.level==='error'?'alert-error':'alert-warn'}">${a.msg}</div>`).join('');
+    const w=document.createElement('div'); w.className='msg bot'; w.style.maxWidth='99%'; w.style.width='100%';
+    w.innerHTML=`<div class="avatar">🤖</div><div class="result-wrap"><div class="result-card">
+      <div class="price-label">推奨販売価格</div>
+      <div class="price-main">${fmt(r.rec)}</div>
+      <div class="price-sub">${ansLabel.maker}　${ansLabel.forkType}　${ansLabel.capacity}　${ansLabel.fuel}${ans.modelNum?'　型式：'+ans.modelNum:''}<br>コンディション：${r.cond.label}　粗利率：約 ${r.mg}%${r.rc>1?'　<span style="opacity:.8">（リーチ補正 +5%）</span>':''}</div>
+      ${alH}${simH}${marketH}${advH}
+      <div class="panel"><div class="panel-title">🔢 算定根拠（${r.wl}）</div>
+        ${r.sb!==null?`<div class="p-row"><span>自社在庫ベース</span><span>${fmt(r.sb)}</span></div>`:''}
+        <div class="p-row"><span>原価ベース（原価×1.30×係数）</span><span>${fmt(r.cb)}</span></div>
+        <div class="p-row"><span>最低ライン（原価＋15%）</span><span>${fmt(r.floor)}</span></div>
+      </div>
+      <div class="panel"><div class="panel-title">💴 費用内訳</div>
+        <div class="p-row"><span>仕入金額</span><span>${fmt(ans.purchase)}</span></div>
+        <div class="p-row"><span>修理・整備費</span><span>${fmt(ans.repair)}</span></div>
+        <div class="p-row"><span>搬送費</span><span>${ansLabel.transport}</span></div>
+        <div class="p-row bold"><span>総原価</span><span>${fmt(r.tc)}</span></div>
+      </div>
+      <div class="panel"><div class="panel-title">📊 交渉レンジ</div>
+        <div class="p-row"><span>下限（最低ライン）</span><span>${fmt(r.floor)}</span></div>
+        <div class="p-row emph"><span>提示レンジ</span><span>${fmt(r.rL)} 〜 ${fmt(r.rH)}</span></div>
+      </div>
+      <button class="restart-btn" onclick="location.reload()">🔄 別の車両を算定する</button>
+    </div></div>`;
+    chat.appendChild(w); scrollBottom();
+  },1500);
+}
+
+// ══════════════════════════════════════════════════════════
+// 起動
+// ══════════════════════════════════════════════════════════
+loadStock();
+loadMarket();
+loadAuction();
+renderPhase1();
+</script>
+</body>
+</html>
