@@ -96,6 +96,20 @@
     /* 買取査定ボタン */
     .kaitori-btn { background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; border:none; border-radius:18px; padding:7px 14px; font-size:12px; cursor:pointer; font-family:inherit; font-weight:600; }
     .kaitori-btn:hover { filter:brightness(1.1); }
+    /* メニュー画面 */
+    .calc-screen { flex:1; display:flex; flex-direction:column; min-height:0; }
+    .menu-screen { flex:1; overflow-y:auto; padding:24px 18px; display:flex; flex-direction:column; gap:14px; background:#f1f5f9; }
+    .menu-title { font-size:15px; font-weight:700; color:#334155; text-align:center; margin:6px 0 4px; }
+    .menu-card { display:flex; align-items:center; gap:16px; width:100%; padding:20px 18px; border:none; border-radius:14px; cursor:pointer; font-family:inherit; text-align:left; color:#fff; box-shadow:0 3px 14px rgba(0,0,0,.12); transition:transform .08s, filter .15s; }
+    .menu-card:hover { filter:brightness(1.07); }
+    .menu-card:active { transform:scale(.98); }
+    .menu-card.sell { background:linear-gradient(135deg,#1a4fc4,#2563eb); }
+    .menu-card.buy  { background:linear-gradient(135deg,#f59e0b,#d97706); }
+    .menu-card.data { background:linear-gradient(135deg,#475569,#334155); }
+    .menu-card-icon { font-size:30px; flex-shrink:0; line-height:1; }
+    .menu-card-text { display:flex; flex-direction:column; gap:3px; }
+    .menu-card-text b { font-size:17px; font-weight:700; }
+    .menu-card-text small { font-size:12px; opacity:.9; font-weight:400; }
     /* 買取査定結果 */
     .kaitori-result { background:linear-gradient(135deg,rgba(245,158,11,.18),rgba(217,119,6,.1)); border:1px solid rgba(245,158,11,.4); border-radius:12px; padding:14px 16px; margin-top:12px; }
     .kaitori-price-label { font-size:11px; opacity:.75; margin-bottom:2px; }
@@ -371,20 +385,41 @@
   <div class="header">
     <div class="header-icon">🏭</div>
     <div class="header-info">
-      <div class="header-title" id="app-mode-title">フォークリフト 販売価格算定</div>
+      <div class="header-title" id="app-mode-title">フォークリフト 査定システム</div>
       <div class="header-sub">フジ自動車工業 ／ 自社在庫＋市場相場連動版</div>
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0">
-      <button class="kaitori-btn" id="kaitori-toggle" onclick="toggleKaitoriMode()">🔨 買取査定</button>
+      <button class="stock-mgr-btn" id="menu-back-btn" onclick="showMenu()" style="display:none">≡ メニュー</button>
       <button class="stock-mgr-btn" onclick="openStockModal()">📋 在庫管理</button>
     </div>
   </div>
-  <div class="progress-wrap">
-    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-    <div class="progress-label" id="progressLabel"></div>
+
+  <!-- メニュー画面（ログイン後はここから業務を選ぶ） -->
+  <div id="menu-screen" class="menu-screen">
+    <div class="menu-title">業務を選んでください</div>
+    <button class="menu-card sell" onclick="startFlow(false)">
+      <span class="menu-card-icon">🏷️</span>
+      <span class="menu-card-text"><b>販売価格算定</b><small>自社在庫として販売する価格を算定</small></span>
+    </button>
+    <button class="menu-card buy" onclick="startFlow(true)">
+      <span class="menu-card-icon">🔨</span>
+      <span class="menu-card-text"><b>買取査定</b><small>お客様から買い取る上限額を査定</small></span>
+    </button>
+    <button class="menu-card data" onclick="openStockModal()">
+      <span class="menu-card-icon">📋</span>
+      <span class="menu-card-text"><b>在庫・相場データ管理</b><small>自社在庫／市場相場／オークションCSV</small></span>
+    </button>
   </div>
-  <div class="chat" id="chat"></div>
-  <div class="input-area" id="inputArea" style="display:none"></div>
+
+  <!-- 算定画面（チャット形式のQ&A） -->
+  <div id="calc-screen" class="calc-screen" style="display:none">
+    <div class="progress-wrap">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-label" id="progressLabel"></div>
+    </div>
+    <div class="chat" id="chat"></div>
+    <div class="input-area" id="inputArea" style="display:none"></div>
+  </div>
 </div>
 
 <script>
@@ -1498,15 +1533,17 @@ function getCondition(){
 function estCoeff(y,h){ const a=2026-y,rH=h<=3000?1.1:h<=6000?1:0.85,rY=a<=5?1.1:a<=10?1:0.85; return(rH+rY)/2; }
 
 function getSimilar(cap,fg){
+  const mk=makerKey(ans.maker);   // 同一メーカーのみで比較
   return stockData
-    .map(v=>{ const d=Math.abs(v.cap-cap); if(v.fuel!==fg||d>0.75) return null;
+    .map(v=>{ const d=Math.abs(v.cap-cap); if(v.fuel!==fg||d>0.75||makerKey(v.maker)!==mk) return null;
       const s=(1-d/.75)*.5+Math.max(0,1-Math.abs(v.year-ans.year)/10)*.25+Math.max(0,1-Math.abs(v.hours-ans.hours)/12000)*.25;
       return{...v,score:s}; })
     .filter(v=>v&&v.score>.08).sort((a,b)=>b.score-a.score).slice(0,3);
 }
 function getMarketSimilar(cap,fg){
+  const mk=makerKey(ans.maker);   // 同一メーカーのみで比較
   return marketData
-    .map(v=>{ const d=Math.abs(v.cap-cap); if(v.fuel!==fg||d>0.75) return null;
+    .map(v=>{ const d=Math.abs(v.cap-cap); if(v.fuel!==fg||d>0.75||makerKey(v.maker)!==mk) return null;
       const s=(1-d/.75)*.5+Math.max(0,1-Math.abs(v.year-ans.year)/10)*.25+Math.max(0,1-Math.abs(v.hours-ans.hours)/12000)*.25;
       return{...v,score:s}; })
     .filter(v=>v&&v.score>.08).sort((a,b)=>b.score-a.score).slice(0,3);
@@ -1733,20 +1770,27 @@ function getAuctionSimilar(cap) {
 // ══════════════════════════════════════════════════════════
 // 買取査定モード
 // ══════════════════════════════════════════════════════════
-function toggleKaitoriMode() {
-  kaitoriMode = !kaitoriMode;
-  const btn   = document.getElementById('kaitori-toggle');
-  const title = document.getElementById('app-mode-title');
-  if (kaitoriMode) {
-    btn.textContent = '📊 販売価格算定へ戻る';
-    btn.style.background = 'rgba(255,255,255,.2)';
-    title.textContent = '🔨 フォークリフト 買取査定';
-  } else {
-    btn.textContent = '🔨 買取査定';
-    btn.style.background = '';
-    title.textContent = 'フォークリフト 販売価格算定';
-  }
-  location.reload(); // チャットリセット
+// メニュー画面へ戻る
+function showMenu() {
+  kaitoriMode = false;
+  document.getElementById('menu-screen').style.display = '';
+  document.getElementById('calc-screen').style.display = 'none';
+  document.getElementById('menu-back-btn').style.display = 'none';
+  document.getElementById('app-mode-title').textContent = 'フォークリフト 査定システム';
+}
+
+// メニューから業務を開始（isKaitori=true:買取査定 / false:販売価格算定）
+function startFlow(isKaitori) {
+  kaitoriMode = isKaitori;
+  // チャット状態をリセット
+  p2step = 0; ans = {}; ansLabel = {};
+  chat.innerHTML = ''; inputArea.innerHTML = ''; inputArea.style.display = 'none';
+  setProgress(0, 1, '');
+  document.getElementById('menu-screen').style.display = 'none';
+  document.getElementById('calc-screen').style.display = 'flex';
+  document.getElementById('menu-back-btn').style.display = '';
+  document.getElementById('app-mode-title').textContent = isKaitori ? '🔨 フォークリフト 買取査定' : '🏷️ フォークリフト 販売価格算定';
+  renderPhase1();
 }
 
 function calcKaitori() {
@@ -1916,9 +1960,9 @@ function showResult(){
       const rs=r.rows.map(v=>{ const c=v.score>=.6?'#34d399':v.score>=.3?'#fbbf24':'#f87171';
         return`<div class="sim-row"><div style="font-size:12px;opacity:.88;flex:1">No.${esc(v.id)}｜${esc(v.maker)} ${esc(v.model)}<br><span style="opacity:.65;font-size:11px">${esc(v.cap)}t・${esc(v.year)}年・${v.hours.toLocaleString()}h</span></div><div style="text-align:right"><div style="font-weight:700">${fmt(v.price)}</div><div style="font-size:10px;opacity:.6;color:${c}">一致度 ${Math.round(v.score*100)}%</div></div></div>`; }).join('');
       const cc=r.cp>=60?'#34d399':r.cp>=30?'#fbbf24':'#f87171';
-      simH=`<div class="panel"><div class="panel-title">🏭 参照した自社類似在庫（${r.rows.length}台）</div>${rs}<div style="margin-top:8px;font-size:11px;opacity:.65">最高一致度：${r.cp}%<div class="conf-bar-wrap"><div class="conf-bar-fill" style="width:${r.cp}%;background:${cc}"></div></div></div></div>`;
+      simH=`<div class="panel"><div class="panel-title">🏭 参照した自社類似在庫（同一メーカー・${r.rows.length}台）</div>${rs}<div style="margin-top:8px;font-size:11px;opacity:.65">最高一致度：${r.cp}%<div class="conf-bar-wrap"><div class="conf-bar-fill" style="width:${r.cp}%;background:${cc}"></div></div></div></div>`;
     } else {
-      simH=`<div class="alert alert-info">ℹ️ 燃料・積載能力が近い自社在庫が見つかりませんでした。原価ベースの算定のみを表示しています。</div>`;
+      simH=`<div class="alert alert-info">ℹ️ 同一メーカーで燃料・積載能力が近い自社在庫が見つかりませんでした。原価ベースの算定のみを表示しています。</div>`;
     }
 
     // 市場相場パネル
@@ -1928,7 +1972,7 @@ function showResult(){
         return`<div class="sim-row"><div style="font-size:12px;opacity:.88;flex:1">${esc(v.maker)} ${esc(v.model||'')}<br><span style="opacity:.65;font-size:11px">${esc(v.cap)}t・${esc(v.year)}年・${v.hours.toLocaleString()}h・${esc(v.source||'-')}</span></div><div style="text-align:right"><div style="font-weight:700">${fmt(v.price)}</div><div style="font-size:10px;opacity:.6;color:${c}">類似度 ${Math.round(v.score*100)}%</div></div></div>`; }).join('');
       const mPrices=r.msim.map(v=>v.price), mAvg=Math.round(mPrices.reduce((a,b)=>a+b,0)/mPrices.length);
       const mUpd=localStorage.getItem(MARKET_UPDATED_KEY)||'2026年6月';
-      marketH=`<div class="panel"><div class="panel-title">🌐 市場相場参考（${r.msim.length}件）<span style="font-size:10px;opacity:.6;margin-left:6px">更新：${mUpd}</span></div>${mrs}<div style="margin-top:8px;font-size:11px;opacity:.75;border-top:1px solid rgba(255,255,255,.15);padding-top:7px">市場平均価格：<b>${fmt(mAvg)}</b>　自社推奨：<b>${fmt(r.rec)}</b>　差額：${r.rec>mAvg?'+':''}${fmt(r.rec-mAvg)}</div></div>`;
+      marketH=`<div class="panel"><div class="panel-title">🌐 市場相場参考（同一メーカー・${r.msim.length}件）<span style="font-size:10px;opacity:.6;margin-left:6px">更新：${mUpd}</span></div>${mrs}<div style="margin-top:8px;font-size:11px;opacity:.75;border-top:1px solid rgba(255,255,255,.15);padding-top:7px">市場平均価格：<b>${fmt(mAvg)}</b>　自社推奨：<b>${fmt(r.rec)}</b>　差額：${r.rec>mAvg?'+':''}${fmt(r.rec-mAvg)}</div></div>`;
     }
 
     // AIアドバイスパネル
@@ -1977,7 +2021,7 @@ function showResult(){
 loadStock();
 loadMarket();
 loadAuction();
-renderPhase1();
+showMenu();
 </script>
 </body>
 </html>
