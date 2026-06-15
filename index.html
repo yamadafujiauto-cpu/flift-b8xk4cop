@@ -51,6 +51,7 @@
     .form-next-btn.disabled { background:#e2e8f0; color:#94a3b8; cursor:not-allowed; }
     .form-text-input { width:100%; padding:7px 11px; border:1.5px solid #cbd5e1; border-radius:10px; font-size:13px; font-family:inherit; outline:none; transition:border-color .15s; }
     .form-text-input:focus { border-color:#2563eb; }
+    .decode-hint { margin-top:5px; font-size:11px; color:#059669; font-weight:600; line-height:1.4; }
     .optional-badge { font-size:10px; color:#94a3b8; font-weight:400; background:#f1f5f9; border-radius:4px; padding:1px 5px; margin-left:4px; }
     .input-area { flex-shrink:0; padding:11px 12px 14px; border-top:1px solid #e2e8f0; background:#fff; }
     .btn-group { display:flex; flex-wrap:wrap; gap:7px; }
@@ -1392,6 +1393,8 @@ function activeP2(){
 }
 
 let p2step=0, ans={}, ansLabel={};
+let autoFilledKeys=new Set(); // 型式デコーダーで自動入力した項目（ユーザーが手動選択したら除外）
+let autoSelecting=false;       // プログラムからの選択中フラグ
 const chat      = document.getElementById('chat');
 const inputArea = document.getElementById('inputArea');
 const fmt       = n => '¥ ' + Math.round(n).toLocaleString();
@@ -1410,6 +1413,7 @@ function removeTyping(){ const e=document.getElementById('typing'); if(e) e.remo
 
 // ── Phase 1 ──
 function renderPhase1() {
+  autoFilledKeys=new Set(); autoSelecting=false;   // 型式自動入力の状態をリセット
   setProgress(0,1,'Step 1 / 2　車両情報を選択');
   setTimeout(()=>{
     addBotBubble('こんにちは！<b>車両情報とコンディション</b>をまとめて選択してください。');
@@ -1424,14 +1428,16 @@ function renderPhase1() {
         const lbl=document.createElement('div'); lbl.className='form-field-label'; lbl.innerHTML=`${dot}${field.label}${opt}`; fd.appendChild(lbl);
         if(field.type==='text'){
           const inp=document.createElement('input'); inp.className='form-text-input'; inp.type='text'; inp.placeholder=field.placeholder||'';
-          inp.addEventListener('input',()=>{ ans[field.key]=inp.value.trim(); ansLabel[field.key]=inp.value.trim(); });
+          inp.addEventListener('input',()=>{ ans[field.key]=inp.value.trim(); ansLabel[field.key]=inp.value.trim(); if(field.key==='modelNum') applyDecode(card); });
           fd.appendChild(inp);
+          if(field.key==='modelNum'){ const hint=document.createElement('div'); hint.id='decode-hint'; hint.className='decode-hint'; fd.appendChild(hint); }
         } else {
           const grp=document.createElement('div'); grp.className='form-btn-group';
           field.options.forEach(opt=>{
             const btn=document.createElement('button'); btn.className='form-btn'; btn.textContent=optLabel(opt);
             btn.dataset.key=field.key; btn.dataset.opt=optLabel(opt);
             btn.onclick=()=>{
+              if(!autoSelecting) autoFilledKeys.delete(field.key);   // ユーザーが手で選んだ＝以後この項目は自動上書きしない
               card.querySelectorAll(`[data-key="${field.key}"]`).forEach(b=>b.classList.remove('selected','sel-a','sel-b','sel-c'));
               if(field.abc){ const r=optLabel(opt).charAt(0); btn.classList.add(r==='A'?'sel-a':r==='B'?'sel-b':'sel-c'); }
               else btn.classList.add('selected');
@@ -1558,6 +1564,74 @@ function modelSeriesKey(model){
   let core = letters.slice(0,2);
   if(letters.charAt(2)==='R') core += 'R';      // FBR等のリーチ表記は残す
   return gen + core;
+}
+
+// ══════════════════════════════════════════════════════════
+// 型式デコーダー（forklift-decoder のパーサーを移植）
+//   型式から メーカー・燃料・リーチ/カウンター・積載量 を自動判定し、Phase1の選択を埋める
+// ══════════════════════════════════════════════════════════
+function normalizeModel(s){
+  return (s||'')
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)) // 全角→半角
+    .replace(/[－ー―‐]/g,'-')
+    .toUpperCase()
+    .replace(/[^A-Z0-9\-]/g,'');
+}
+function capTonToBucket(t){
+  if(t==null||isNaN(t)) return null;
+  if(t<=1.0) return '1.0t以下';
+  if(t>=3.5) return '3.5t以上';
+  const buckets={'1.5t':1.5,'2.0t':2.0,'2.5t':2.5,'3.0t':3.0};
+  let best=null,bd=Infinity;
+  for(const lab in buckets){ const d=Math.abs(buckets[lab]-t); if(d<bd){bd=d;best=lab;} }
+  return best;
+}
+// 戻り値: {maker, fuel, type, capacity}（判定できない項目は null）
+function decodeModel(raw){
+  let s=normalizeModel(raw);
+  s=s.replace(/^\d{1,3}-(?=\d+[FS])/,'');                   // 銘板/競りのロット番号プレフィックス(02- 等)を除去
+  if(s.length<2) return null;
+  const FUELMAP={G:'ガソリン',D:'ディーゼル',B:'電動（バッテリー）'};
+  let maker=null, fuelCode=null, isReach=false, capTon=null, m;
+  // [A-Z]* は爪長(L)等の仕様記号を読み飛ばして屯数を拾うため（7FGL15→1.5t）
+  if(m=s.match(/^(\d+)[FS]([GDB])?(R|E)?[A-Z]*(\d+)?/)){    // トヨタ: 7FG10 / 8FBR15 / 7FGL15（数字始まりは断定）
+    maker='トヨタ'; fuelCode=m[2]||null; isReach=m[3]==='R'; if(m[4])capTon=parseInt(m[4],10)/10;
+  } else if(/^[NH]/.test(s)){                                // ニッサン系→自社の選択肢はユニキャリア
+    maker='ユニキャリア'; const t=s.match(/(\d+)$/); if(t){const v=parseInt(t[1],10)/10; if(v>=0.5&&v<=10)capTon=v;}
+  } else if(m=s.match(/^F([GDB])?(R|C)?[A-Z]*(\d+)?/)){     // F系(コマツ/住友/ニチユ/三菱等)：メーカーは断定せず燃料等のみ
+    fuelCode=m[1]||null; isReach=m[2]==='R'; if(m[3])capTon=parseInt(m[3],10)/10;
+  } else { return null; }
+  let type=null;
+  if(isReach) type='リーチ';
+  else if(fuelCode) type='カウンター';                       // 燃料が読めればエンジン/電動カウンター
+  return { maker, fuel: fuelCode?FUELMAP[fuelCode]:null, type, capacity: capTonToBucket(capTon) };
+}
+// Phase1カード内の指定キーのボタンをプログラムから選択（onclickロジックを流用、ユーザー上書き判定は抑止）
+function autoSelectOption(card,key,label){
+  if(!label) return false;
+  const btn=[...card.querySelectorAll(`[data-key="${key}"]`)].find(b=>b.dataset.opt===label);
+  if(!btn) return false;
+  if(!btn.classList.contains('selected')){ autoSelecting=true; btn.click(); autoSelecting=false; }
+  autoFilledKeys.add(key);
+  return true;
+}
+// 型式入力 → 各項目を自動セット（手動選択済みの項目は上書きしない）
+function applyDecode(card){
+  const dec=decodeModel(ans.modelNum||'');
+  const hint=document.getElementById('decode-hint');
+  if(!dec){ if(hint) hint.textContent=''; return; }
+  const labels={maker:'メーカー',fuel:'燃料',forkType:'タイプ',capacity:'積載量'};
+  const filled=[];
+  const trySet=(key,label)=>{
+    if(!label) return;
+    if(ans[key]!==undefined && !autoFilledKeys.has(key)) return; // ユーザーが手で選んだ項目は触らない
+    if(autoSelectOption(card,key,label)) filled.push(key);
+  };
+  trySet('maker', dec.maker);
+  trySet('fuel', dec.fuel);                                    // fuel→syncForkTypeのため forkType より先
+  trySet('forkType', dec.type==='リーチ'?'リーチ（リーチフォーク）':dec.type==='カウンター'?'カウンター（バランス型）':null);
+  trySet('capacity', dec.capacity);
+  if(hint) hint.textContent = filled.length ? '🔎 型式から自動入力：'+filled.map(k=>labels[k]).join('・')+'（必要なら手動で修正できます）' : '';
 }
 function recFuel(v){ const f=v.fuel||''; if(/^(電動|ガソリン|ディーゼル|LPG)$/.test(f))return f; if(/電気|バッテリー/.test(f))return'電動'; return f||'電動'; }
 function getCondition(){
