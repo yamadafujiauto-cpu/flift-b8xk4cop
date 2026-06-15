@@ -428,6 +428,16 @@
 // ══════════════════════════════════════════════════════════
 const APP_PASSWORD = 'fuji2024';
 
+// ★ 不動車（自走不可）のリスク割引率（%）── 走行可価格からこの割合を引きます ★
+const NONRUN_RISK_PCT = 50;
+
+// ★ 買取査定でアワーメーター不明（故障）の場合の割引率（%）★
+const HOURS_UNKNOWN_PCT = 30;
+
+// ★ 希少アタッチメント（全回転フォーク／全回転ベールクランプ）の販売価格は粗利を何倍にするか ★
+const ATTACH_PROFIT_MULT = 2;
+const RARE_ATTACHMENTS = ['全回転フォーク','全回転ベールクランプ'];
+
 // ══════════════════════════════════════════════════════════
 // 初期在庫データ（localStorageに何もない初回のみ使用）
 // ══════════════════════════════════════════════════════════
@@ -1346,6 +1356,8 @@ const PHASE1_SECTIONS = [
     { key:'forkType', label:'車両タイプ', options:['カウンター（バランス型）','リーチ（リーチフォーク）'] },
     { key:'modelNum', label:'型式', type:'text', placeholder:'例：8FB15（不明の場合は空欄でも可）', optional:true },
     { key:'capacity', label:'積載能力',  options:['1.0t以下','1.5t','2.0t','2.5t','3.0t','3.5t以上'] },
+    { key:'mobility', label:'稼働状態',  options:['自走可（エンジン・走行OK）','不動（自走不可）'] },
+    { key:'attachment', label:'アタッチメント', sellOnly:true, options:['標準（フォーク）','全回転フォーク','全回転ベールクランプ','その他'] },
   ]},
   { title:'コンディション（A=良・B=普通・C=要対応）', fields:[
     { key:'tire',   label:'タイヤ残量',       abc:true, options:['A：良好（70%以上）','B：普通（40〜69%）','C：要交換（39%以下）'] },
@@ -1354,24 +1366,29 @@ const PHASE1_SECTIONS = [
     { key:'body',   label:'外装・車体',        abc:true, options:['A：きれい（小傷程度）','B：凹み・錆あり','C：著しく劣化'] },
   ]},
 ];
-const PHASE1_REQUIRED_KEYS = PHASE1_SECTIONS.flatMap(s => s.fields.filter(f=>!f.optional).map(f=>f.key));
+// 必須キー（買取査定では sellOnly 項目＝アタッチメント等を除外）
+function reqKeys(){ return PHASE1_SECTIONS.flatMap(s => s.fields.filter(f=>!f.optional && !(f.sellOnly&&kaitoriMode)).map(f=>f.key)); }
 
 // ══════════════════════════════════════════════════════════
 // Phase 2: テキスト入力 + ボタン選択
 // ══════════════════════════════════════════════════════════
 const PHASE2_QUESTIONS = [
   { key:'year',      type:'number', bot:'<b>年式（西暦）</b>を入力してください。', placeholder:'例：2018', suffix:'年', min:1980, max:2026, errorMsg:'1980〜2026 の値を入力してください' },
-  { key:'hours',     type:'number', bot:'<b>アワーメーター（稼働時間）</b>を入力してください。', placeholder:'例：2500', suffix:'時間', min:0, max:99999, errorMsg:'0以上の数値を入力してください' },
+  { key:'hours',     type:'number', allowUnknown:true, bot:'<b>アワーメーター（稼働時間）</b>を入力してください。', placeholder:'例：2500', suffix:'時間', min:0, max:99999, errorMsg:'0以上の数値を入力してください' },
+  { key:'reviveCost',type:'number', bot:'<b>不動車：復旧に必要な想定修理費</b>を入力してください（円）。<br>エンジン載せ替え・油圧・電装など、自走できる状態に戻す概算でOKです。', placeholder:'例：300000', suffix:'円', min:0, max:99999999, errorMsg:'0以上の金額を入力してください' },
   { key:'purchase',  type:'number', bot:'<b>仕入金額</b>を入力してください（円）。', placeholder:'例：500000', suffix:'円', min:0, max:99999999, errorMsg:'0以上の金額を入力してください' },
   { key:'repair',    type:'number', bot:'<b>修理・整備費</b>を入力してください（円）。\n整備なしの場合は <b>0</b> と入力してください。', placeholder:'例：30000（なければ 0）', suffix:'円', min:0, max:99999999, errorMsg:'0以上の金額を入力してください' },
   { key:'transport', type:'buttons', bot:'<b>搬送費</b>を選んでください。',
     options:[{label:'なし（0円）',value:0},{label:'〜3万円',value:15000},{label:'3〜10万円',value:65000},{label:'10万円以上',value:150000}] },
 ];
 // 買取査定では仕入金額（算出対象）・修理整備費・搬送費（入庫前で不明）は質問しない。年式とアワーのみ。
+// 復旧想定修理費（reviveCost）は「買取査定 × 不動車」のときだけ質問する。
 function activeP2(){
-  return kaitoriMode
+  const nonRun = (ans.mobility||'').includes('不動');
+  let qs = kaitoriMode
     ? PHASE2_QUESTIONS.filter(q => !['purchase','repair','transport'].includes(q.key))
     : PHASE2_QUESTIONS;
+  return qs.filter(q => q.key!=='reviveCost' || (kaitoriMode && nonRun));
 }
 
 let p2step=0, ans={}, ansLabel={};
@@ -1400,6 +1417,7 @@ function renderPhase1() {
     PHASE1_SECTIONS.forEach(section=>{
       const sec=document.createElement('div'); sec.className='form-section-title'; sec.textContent=section.title; card.appendChild(sec);
       section.fields.forEach(field=>{
+        if(field.sellOnly && kaitoriMode) return;   // 買取査定では販売専用項目（アタッチメント）は表示しない
         const fd=document.createElement('div'); fd.className='form-field';
         const opt=field.optional?'<span class="optional-badge">任意</span>':'';
         const dot=field.optional?'': `<span class="req-dot" id="dot-${field.key}"></span>`;
@@ -1432,7 +1450,7 @@ function renderPhase1() {
     const footer=document.createElement('div'); footer.className='form-footer';
     const txt=document.createElement('div'); txt.className='form-footer-text'; txt.id='phase1-txt'; txt.textContent='0 / 9 選択済み';
     const nxt=document.createElement('button'); nxt.className='form-next-btn disabled'; nxt.id='phase1-next'; nxt.textContent='次へ → 費用を入力';
-    nxt.onclick=()=>{ if(PHASE1_REQUIRED_KEYS.every(k=>ans[k]!==undefined)) submitPhase1(card); };
+    nxt.onclick=()=>{ if(reqKeys().every(k=>ans[k]!==undefined)) submitPhase1(card); };
     footer.appendChild(txt); footer.appendChild(nxt); card.appendChild(footer);
     const wrap=document.createElement('div'); wrap.style.cssText='width:100%;align-self:stretch;padding:0 0 4px'; wrap.appendChild(card);
     chat.appendChild(wrap); scrollBottom();
@@ -1440,8 +1458,8 @@ function renderPhase1() {
 }
 
 function updatePhase1Next(){
-  const done=PHASE1_REQUIRED_KEYS.filter(k=>ans[k]!==undefined).length;
-  const total=PHASE1_REQUIRED_KEYS.length;
+  const done=reqKeys().filter(k=>ans[k]!==undefined).length;
+  const total=reqKeys().length;
   const txt=document.getElementById('phase1-txt'); if(txt) txt.textContent=`${done} / ${total} 選択済み`;
   const btn=document.getElementById('phase1-next'); if(btn) btn.className='form-next-btn '+(done===total?'ready':'disabled');
 }
@@ -1501,10 +1519,18 @@ function renderP2(){
         const raw=inp.value.trim().replace(/[,，]/g,''); const num=Number(raw);
         if(raw===''||isNaN(num)||num<q.min||num>q.max){ inp.classList.add('error'); inp.placeholder=q.errorMsg; inp.value=''; inp.focus(); return; }
         inputArea.innerHTML=''; addUserBubble(num.toLocaleString()+' '+q.suffix);
+        if(q.key==='hours') ans.hoursUnknown=false;   // 数値入力時は不明フラグを解除
         ans[q.key]=num; ansLabel[q.key]=num.toLocaleString()+' '+q.suffix; p2step++; renderP2();
       };
       btn.onclick=submit; inp.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); }); inp.addEventListener('input',()=>inp.classList.remove('error'));
       row.appendChild(inp); row.appendChild(btn); inputArea.appendChild(row);
+      // 買取査定でアワーメーター故障など、数値不明のときは「不明」を選べる
+      if(q.allowUnknown && kaitoriMode){
+        const unk=document.createElement('button'); unk.className='choice-btn'; unk.style.marginTop='8px';
+        unk.textContent='不明（メーター故障など）';
+        unk.onclick=()=>{ inputArea.innerHTML=''; addUserBubble('不明（メーター故障など）'); ans[q.key]=null; ans.hoursUnknown=true; ansLabel[q.key]='不明'; p2step++; renderP2(); };
+        inputArea.appendChild(unk);
+      }
       setTimeout(()=>inp.focus(),80);
     }
     scrollBottom();
@@ -1521,6 +1547,18 @@ function getFuelFine(){ const f=ans.fuel||''; if(/電動|バッテリー|電気/
 function getForkType(){ return /リーチ/.test(ans.forkType||'') ? 'リーチ' : 'カウンター'; }
 function makerKey(s){ s=(s||'').replace(/[\s　]/g,''); if(/トヨタ|TOYOTA|豊田/i.test(s))return'toyota'; if(/コマツ|KOMATSU|小松/i.test(s))return'komatsu'; if(/ニチユ|NICHIYU/i.test(s))return'nichiyu'; if(/スミトモ|住友|SUMITOMO/i.test(s))return'sumitomo'; if(/ユニキャリア|UNICARRIERS|日産|ニッサン|NISSAN|TCM/i.test(s))return'unicarriers'; if(/三菱|ミツビシ|MITSUBISHI/i.test(s))return'mitsubishi'; if(/BYD/i.test(s))return'byd'; return s.toLowerCase(); }
 function recType(v){ if(v.type)return v.type; return /リーチ|reach|FBR|RFTL|FBRM/i.test(v.model||'')?'リーチ':'カウンター'; }
+// 型式の「世代＋系統」キー（あいまい照合用）。例: 8FG15→8FG, 8FGL15→8FG, 02-8FG25→8FG, 7FBR18→7FBR, FB15-7→FB
+// 7FGと8FGは別キー（世代差）、8FGと8FGL（爪長違い等）は同キーになるよう、先頭2文字＋リーチのRのみ採用。
+function modelSeriesKey(model){
+  const cleaned = String(model||'').toUpperCase().replace(/[^0-9A-Z]/g,'');
+  const mm = cleaned.match(/(\d?)([A-Z]+)/);   // 世代数字(任意)＋アルファベット群。先頭の競りロット番号(02等)は自動でスキップ
+  if(!mm) return '';
+  const gen = mm[1]||'';
+  const letters = mm[2];
+  let core = letters.slice(0,2);
+  if(letters.charAt(2)==='R') core += 'R';      // FBR等のリーチ表記は残す
+  return gen + core;
+}
 function recFuel(v){ const f=v.fuel||''; if(/^(電動|ガソリン|ディーゼル|LPG)$/.test(f))return f; if(/電気|バッテリー/.test(f))return'電動'; return f||'電動'; }
 function getCondition(){
   const age=2026-ans.year, rH=ans.hours<=3000?'A':ans.hours<=6000?'B':'C', rY=age<=5?'A':age<=10?'B':'C';
@@ -1532,21 +1570,35 @@ function getCondition(){
 }
 function estCoeff(y,h){ const a=2026-y,rH=h<=3000?1.1:h<=6000?1:0.85,rY=a<=5?1.1:a<=10?1:0.85; return(rH+rY)/2; }
 
+// 同一メーカーで絞った上で、型式（世代）が一致するものを優先（あれば）。足りなければメーカー一致で参考表示。
+function pickByModelSeries(scored){
+  const wantSeries = modelSeriesKey(ans.modelNum);
+  let pool = scored, scope = 'maker';
+  if (wantSeries) {
+    const same = scored.filter(v => modelSeriesKey(v.model) === wantSeries);
+    if (same.length) { pool = same; scope = 'model'; }   // 同一型式が1件でもあれば優先
+  }
+  const list = pool.sort((a,b)=>b.score-a.score).slice(0,3);
+  list.scope = scope;
+  return list;
+}
 function getSimilar(cap,fg){
-  const mk=makerKey(ans.maker);   // 同一メーカーのみで比較
-  return stockData
+  const mk=makerKey(ans.maker);   // まず同一メーカーで絞る
+  const scored = stockData
     .map(v=>{ const d=Math.abs(v.cap-cap); if(v.fuel!==fg||d>0.75||makerKey(v.maker)!==mk) return null;
       const s=(1-d/.75)*.5+Math.max(0,1-Math.abs(v.year-ans.year)/10)*.25+Math.max(0,1-Math.abs(v.hours-ans.hours)/12000)*.25;
       return{...v,score:s}; })
-    .filter(v=>v&&v.score>.08).sort((a,b)=>b.score-a.score).slice(0,3);
+    .filter(v=>v&&v.score>.08);
+  return pickByModelSeries(scored);
 }
 function getMarketSimilar(cap,fg){
-  const mk=makerKey(ans.maker);   // 同一メーカーのみで比較
-  return marketData
+  const mk=makerKey(ans.maker);   // まず同一メーカーで絞る
+  const scored = marketData
     .map(v=>{ const d=Math.abs(v.cap-cap); if(v.fuel!==fg||d>0.75||makerKey(v.maker)!==mk) return null;
       const s=(1-d/.75)*.5+Math.max(0,1-Math.abs(v.year-ans.year)/10)*.25+Math.max(0,1-Math.abs(v.hours-ans.hours)/12000)*.25;
       return{...v,score:s}; })
-    .filter(v=>v&&v.score>.08).sort((a,b)=>b.score-a.score).slice(0,3);
+    .filter(v=>v&&v.score>.08);
+  return pickByModelSeries(scored);
 }
 
 function detectAnomalies(sim,floor){
@@ -1576,8 +1628,16 @@ function calcAll(){
   else{rec=cb;wl='原価算定のみ（自社在庫なし）';}
   const rc=(ans.forkType||'').includes('リーチ')?1.05:1;
   rec=Math.max(Math.round(rec*rc/10000)*10000,floor);
+  // 希少アタッチメント（全回転フォーク／全回転ベールクランプ）：数が少なく高値が付くため粗利を倍に設定
+  const rareAttach = RARE_ATTACHMENTS.some(a => (ans.attachment||'')===a);
+  const recBeforeAttach = rec;
+  if(rareAttach){ rec = Math.max(rec, Math.round((tc + ATTACH_PROFIT_MULT*(rec - tc))/10000)*10000); } // 粗利（rec-tc）をATTACH_PROFIT_MULT倍
+  // 不動車：走行可価格からリスク割引（現状渡し前提。買い手が修理＋リスクを負担）
+  const recRunning=rec;
+  const nonRunning=(ans.mobility||'').includes('不動');
+  if(nonRunning){ rec=Math.max(0,Math.round(recRunning*(1-NONRUN_RISK_PCT/100)/10000)*10000); }
   const mg=tc>0?Math.round((1-tc/rec)*100):0;
-  return{tc,cb,sb,rec,floor,rL:Math.round(rec*.92/10000)*10000,rH:Math.round(rec*1.08/10000)*10000,mg,cond,cp:Math.round(conf*100),wl,sim,msim,rows,an,rc};
+  return{tc,cb,sb,rec,recRunning,nonRunning,nonRunRisk:NONRUN_RISK_PCT,rareAttach,recBeforeAttach,attachMult:ATTACH_PROFIT_MULT,floor,rL:Math.round(rec*.92/10000)*10000,rH:Math.round(rec*1.08/10000)*10000,mg,cond,cp:Math.round(conf*100),wl,sim,msim,rows,an,rc,simScope:sim.scope,msimScope:msim.scope};
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1754,16 +1814,22 @@ function getAuctionSimilar(cap) {
     if (recType(v) !== wantType) return false;               // リーチ／カウンター一致
     return Math.abs(v.cap - cap) <= cap * 0.4;               // 積載が近い
   });
-  const same = base.filter(v => makerKey(v.maker) === wantMaker);
-  const useSame = same.length >= 3;                          // 同一メーカーが3件以上なら同一メーカーで比較
-  const pool = useSame ? same : base;                        // 足りなければ全メーカーで参考
+  const wantSeries = modelSeriesKey(ans.modelNum);
+  const sameMakerArr = base.filter(v => makerKey(v.maker) === wantMaker);
+  const sameSeries   = wantSeries ? sameMakerArr.filter(v => modelSeriesKey(v.model) === wantSeries) : [];
+  // 同一型式(世代)が3件以上→型式で比較 / 次に同一メーカー3件以上→メーカー / 足りなければ全メーカー参考
+  let pool, scope;
+  if (sameSeries.length >= 3)        { pool = sameSeries;   scope = 'model'; }
+  else if (sameMakerArr.length >= 3) { pool = sameMakerArr; scope = 'maker'; }
+  else                               { pool = base;         scope = 'all';   }
   const list = pool.map(v => {
     const capScore  = Math.max(0, 1 - Math.abs(v.cap-cap)/(cap*0.5));
     const yearScore = ans.year  ? Math.max(0, 1 - Math.abs(v.year-ans.year)/5) : 0.5;
     const hourScore = ans.hours ? Math.max(0, 1 - Math.abs(v.hours-ans.hours)/10000) : 0.5;
     return { ...v, score: capScore*0.5+yearScore*0.25+hourScore*0.25 };
   }).filter(v=>v.score>0.2).sort((a,b)=>b.score-a.score).slice(0,10);
-  list.sameMaker = useSame;
+  list.scope = scope;
+  list.sameMaker = (scope !== 'all');
   return list;
 }
 
@@ -1799,23 +1865,36 @@ function calcKaitori() {
   const mkt  = getMarketSimilar(cap, getFuelGroup());
   const margin = 0.30; // 目標粗利30%
 
+  const scopeLabel = auc.scope==='model' ? '同一型式' : auc.scope==='maker' ? '同一メーカー' : '全メーカー参考';
   let refPrice = 0, refLabel = '';
   if (auc.length >= 2) {
     const aucAvg = Math.round(auc.map(v=>v.price).reduce((a,b)=>a+b,0)/auc.length);
     refPrice = aucAvg;
-    refLabel = `オークション平均 ${fmt(aucAvg)}（${auc.length}件・${auc.sameMaker?'同一メーカー':'全メーカー参考'}）`;
+    refLabel = `オークション平均 ${fmt(aucAvg)}（${auc.length}件・${scopeLabel}）`;
   } else if (mkt.length >= 3) {
     const mktAvg = Math.round(mkt.map(v=>v.price).reduce((a,b)=>a+b,0)/mkt.length);
     refPrice = Math.round(mktAvg * 0.75); // 市場販売価格の75%をオークション相場と推定
     refLabel = `市場販売価格から推定 ${fmt(mktAvg)}×75%`;
   }
 
-  // 仕入金額・修理整備費・搬送費は入庫前で不明なため差し引かない（入庫後に別途調整）
-  const upperBuy   = refPrice > 0 ? Math.round(refPrice / (1+margin) / 10000) * 10000 : 0;
-  const lowerBuy   = Math.round(upperBuy * 0.85 / 10000) * 10000;
+  // 仕入金額・搬送費は入庫前で不明なため差し引かない（入庫後に別途調整）
   const targetSell = refPrice; // 想定再販（オークション相場）
+  const baseUpper = refPrice > 0 ? Math.round(refPrice / (1+margin) / 10000) * 10000 : 0; // 走行可・メーター正常前提の上限
 
-  return { auc, mkt, refPrice, refLabel, upperBuy, lowerBuy, targetSell, margin, sameMaker: auc.sameMaker };
+  // ① アワーメーター不明（故障）：稼働時間が信頼できないため割引
+  const hoursUnknown = !!ans.hoursUnknown;
+  let afterHours = baseUpper;
+  if (hoursUnknown && refPrice > 0) afterHours = Math.round(baseUpper * (1-HOURS_UNKNOWN_PCT/100) / 10000) * 10000;
+
+  // ② 不動車：走行可の上限をリスク割引し、復旧想定修理費を控除
+  const nonRunning = (ans.mobility||'').includes('不動');
+  const reviveCost = ans.reviveCost || 0;
+  let upperBuy = afterHours;
+  if (nonRunning && refPrice > 0) upperBuy = Math.max(0, Math.round((afterHours*(1-NONRUN_RISK_PCT/100) - reviveCost) / 10000) * 10000);
+  const lowerBuy = refPrice > 0 ? Math.max(0, Math.round(upperBuy * 0.85 / 10000) * 10000) : 0;
+  const upperBuyRun = afterHours; // 不動車バナー用「走行可能なら」の額（アワー不明割引は反映済み）
+
+  return { auc, mkt, refPrice, refLabel, scope: auc.scope, baseUpper, afterHours, upperBuy, lowerBuy, upperBuyRun, targetSell, margin, sameMaker: auc.sameMaker, nonRunning, reviveCost, nonRunRisk: NONRUN_RISK_PCT, hoursUnknown, hoursDiscPct: HOURS_UNKNOWN_PCT };
 }
 
 function showKaitoriResult() {
@@ -1831,33 +1910,53 @@ function showKaitoriResult() {
       return `<div class="sim-row"><div style="font-size:12px;opacity:.88;flex:1">${esc(v.maker)} ${esc(v.model||'')}<br><span style="opacity:.65;font-size:11px">${esc(v.cap)}t・${esc(v.type||'')}・${esc(v.year)}年・${(v.hours||0).toLocaleString()}h</span></div><div style="text-align:right"><div style="font-weight:700">${fmt(v.price)}</div><div style="font-size:10px;opacity:.6;color:${c}">類似度 ${Math.round(v.score*100)}%</div></div></div>`;
     }).join('');
     const aucAvg = Math.round(auc.map(v=>v.price).reduce((a,b)=>a+b,0)/auc.length);
-    const scope = r.sameMaker ? `同一メーカー（${esc(makerLabel)}）` : '全メーカー参考';
-    aucH = `<div class="panel"><div class="panel-title">🔨 類似オークション落札実績（直近1年・${esc(typeLabel)}・${esc(fuelLabel)}・${scope}・${auc.length}件）</div>${rows}<div style="margin-top:8px;font-size:11px;opacity:.75;border-top:1px solid rgba(255,255,255,.15);padding-top:7px">落札平均：<b>${fmt(aucAvg)}</b>${r.sameMaker?'':'<br><span style="color:#fbbf24">※同一メーカーの実績が少ないため全メーカーで参考表示</span>'}</div></div>`;
+    const scope = r.scope==='model' ? `同一型式（${esc(makerLabel)}）` : r.scope==='maker' ? `同一メーカー（${esc(makerLabel)}）` : '全メーカー参考';
+    const scopeNote = r.scope==='all' ? '<br><span style="color:#fbbf24">※同一メーカーの実績が少ないため全メーカーで参考表示</span>'
+                    : (r.scope==='maker' && modelSeriesKey(ans.modelNum)) ? '<br><span style="color:#fbbf24">※同一型式の実績が少ないため同一メーカーで参考表示</span>'
+                    : '';
+    aucH = `<div class="panel"><div class="panel-title">🔨 類似オークション落札実績（直近1年・${esc(typeLabel)}・${esc(fuelLabel)}・${scope}・${auc.length}件）</div>${rows}<div style="margin-top:8px;font-size:11px;opacity:.75;border-top:1px solid rgba(255,255,255,.15);padding-top:7px">落札平均：<b>${fmt(aucAvg)}</b>${scopeNote}</div></div>`;
   } else {
     aucH = `<div class="alert alert-info">ℹ️ この条件（${esc(typeLabel)}・${esc(fuelLabel)}・${esc(makerLabel)}）に合う直近1年のオークション実績がありません。<br>市場販売価格（${r.mkt.length}件）から推定値を算出しています。新しい会場CSVを取り込むと精度が上がります。</div>`;
   }
 
   const w = document.createElement('div');
   w.className = 'msg bot'; w.style.maxWidth='99%'; w.style.width='100%';
+  const banners =
+    (r.hoursUnknown ? `<div class="alert alert-warn" style="margin-bottom:8px">⏱️ <b>アワーメーター不明（故障）</b>のため稼働時間が確認できず、<b>${r.hoursDiscPct}%</b> 割り引いています。実機のエンジン・油圧・外装の状態をよく確認してください。</div>` : '')
+  + (r.nonRunning ? `<div class="alert alert-warn" style="margin-bottom:8px">🚧 <b>不動車（自走不可）</b>のため、上限から <b>${r.nonRunRisk}%</b> のリスク割引＋想定修理費 <b>${fmt(r.reviveCost)}</b> を控除しています。</div>` : '');
+  const hasAdj = r.hoursUnknown || r.nonRunning;
+  const mainPrice = r.upperBuy > 0 ? fmt(r.upperBuy) : (r.nonRunning && r.refPrice>0 ? 'ほぼ価値なし' : '参考データ不足');
+  const footerNote = r.nonRunning
+    ? '不動車のため<b>想定修理費は控除済み</b>です。実際の故障箇所が判明したら修理費の差額を調整してください。状態が悪い・原因不明なら下限寄りで提示を。'
+    : r.hoursUnknown
+    ? 'アワー不明のため<b>30%割引済み</b>です。整備記録や外装・エンジンの状態が良ければ割引を緩めても構いません。搬送費は別途差し引いてください。'
+    : 'この金額は<b>搬送費を差し引く前</b>の上限です。入庫後に運搬費が判明したら差し引いて最終提示してください。<br>エンドユーザーからの買取はオークション相場より<b>5〜15%高め</b>でも成立します（会場手数料分）。コンディション良好（B以上）なら上限寄りでも可。';
+  const adjRows = hasAdj ? `
+      <div class="kaitori-row"><span>調整前の上限（相場÷${(1+r.margin).toFixed(2)}）</span><span>${fmt(r.baseUpper)}</span></div>
+      ${r.hoursUnknown ? `<div class="kaitori-row"><span>アワー不明割引（−${r.hoursDiscPct}%）</span><span>−${fmt(r.baseUpper - r.afterHours)}</span></div>` : ''}
+      ${r.nonRunning ? `<div class="kaitori-row"><span>不動車リスク割引（−${r.nonRunRisk}%）</span><span>−${fmt(Math.round(r.afterHours*r.nonRunRisk/100))}</span></div>
+      <div class="kaitori-row"><span>想定修理費 控除</span><span>−${fmt(r.reviveCost)}</span></div>` : ''}
+      <div class="kaitori-row" style="font-weight:700;border-top:1px solid rgba(255,255,255,.3);margin-top:4px;padding-top:8px"><span>買取上限</span><span>${fmt(Math.max(0,r.upperBuy))}</span></div>`
+    : `
+      <div class="kaitori-row"><span>目標粗利（${Math.round(r.margin*100)}%）</span><span>${fmt(Math.round(r.refPrice - r.upperBuy))}</span></div>
+      <div class="kaitori-row" style="font-weight:700;border-top:1px solid rgba(255,255,255,.3);margin-top:4px;padding-top:8px"><span>想定再販価格</span><span>${fmt(r.targetSell)}</span></div>`;
   w.innerHTML = `<div class="avatar">🤖</div><div class="result-wrap"><div class="result-card">
+    ${banners}
     <div class="kaitori-result">
-      <div class="kaitori-price-label">推奨買取価格（上限／整備・運搬費を引く前）</div>
-      <div class="kaitori-price-main">${r.upperBuy > 0 ? fmt(r.upperBuy) : '参考データ不足'}</div>
+      <div class="kaitori-price-label">推奨買取価格${r.nonRunning?'（不動車）':''}（上限／搬送費を引く前）</div>
+      <div class="kaitori-price-main">${mainPrice}</div>
       ${r.upperBuy > 0 ? `<div class="kaitori-price-range">安全ライン：${fmt(r.lowerBuy)} 〜 ${fmt(r.upperBuy)}</div>` : ''}
+      ${r.upperBuy<=0 && r.nonRunning && r.refPrice>0 ? `<div class="kaitori-price-range">復旧費がリスク控除後の価値を上回ります。部品取り／スクラップ前提で個別判断してください。</div>` : ''}
     </div>
-    ${r.upperBuy > 0 ? `
+    ${r.refPrice > 0 ? `
     <div class="panel">
       <div class="panel-title">📊 買取価格の根拠</div>
       <div class="kaitori-row"><span>参考相場</span><span style="font-size:11px;opacity:.8">${r.refLabel}</span></div>
-      <div class="kaitori-row"><span>目標粗利（${Math.round(r.margin*100)}%）</span><span>${fmt(Math.round(r.refPrice - r.upperBuy))}</span></div>
-      <div class="kaitori-row" style="font-weight:700;border-top:1px solid rgba(255,255,255,.3);margin-top:4px;padding-top:8px"><span>想定再販価格</span><span>${fmt(r.targetSell)}</span></div>
+      ${adjRows}
     </div>` : ''}
     ${aucH}
-    <div class="alert alert-info" style="margin-top:10px;font-size:11px">
-      💡 この金額は<b>修理・整備費／搬送費を差し引く前</b>の上限です。入庫後に整備費・運搬費が判明したら、その分を差し引いて最終提示してください。<br>
-      エンドユーザーからの買取はオークション相場より<b>5〜15%高め</b>でも成立します（会場手数料分）。コンディション良好（B以上）なら上限寄りでも可。
-    </div>
-    <button class="restart-btn" onclick="location.reload()">🔄 別の車両を査定する</button>
+    <div class="alert alert-info" style="margin-top:10px;font-size:11px">💡 ${footerNote}</div>
+    <button class="restart-btn" onclick="startFlow(true)">🔄 別の車両を査定する</button>
   </div></div>`;
   chat.appendChild(w); scrollBottom();
 }
@@ -1960,7 +2059,7 @@ function showResult(){
       const rs=r.rows.map(v=>{ const c=v.score>=.6?'#34d399':v.score>=.3?'#fbbf24':'#f87171';
         return`<div class="sim-row"><div style="font-size:12px;opacity:.88;flex:1">No.${esc(v.id)}｜${esc(v.maker)} ${esc(v.model)}<br><span style="opacity:.65;font-size:11px">${esc(v.cap)}t・${esc(v.year)}年・${v.hours.toLocaleString()}h</span></div><div style="text-align:right"><div style="font-weight:700">${fmt(v.price)}</div><div style="font-size:10px;opacity:.6;color:${c}">一致度 ${Math.round(v.score*100)}%</div></div></div>`; }).join('');
       const cc=r.cp>=60?'#34d399':r.cp>=30?'#fbbf24':'#f87171';
-      simH=`<div class="panel"><div class="panel-title">🏭 参照した自社類似在庫（同一メーカー・${r.rows.length}台）</div>${rs}<div style="margin-top:8px;font-size:11px;opacity:.65">最高一致度：${r.cp}%<div class="conf-bar-wrap"><div class="conf-bar-fill" style="width:${r.cp}%;background:${cc}"></div></div></div></div>`;
+      simH=`<div class="panel"><div class="panel-title">🏭 参照した自社類似在庫（${r.simScope==='model'?'同一型式':'同一メーカー'}・${r.rows.length}台）</div>${rs}<div style="margin-top:8px;font-size:11px;opacity:.65">最高一致度：${r.cp}%<div class="conf-bar-wrap"><div class="conf-bar-fill" style="width:${r.cp}%;background:${cc}"></div></div></div></div>`;
     } else {
       simH=`<div class="alert alert-info">ℹ️ 同一メーカーで燃料・積載能力が近い自社在庫が見つかりませんでした。原価ベースの算定のみを表示しています。</div>`;
     }
@@ -1972,7 +2071,7 @@ function showResult(){
         return`<div class="sim-row"><div style="font-size:12px;opacity:.88;flex:1">${esc(v.maker)} ${esc(v.model||'')}<br><span style="opacity:.65;font-size:11px">${esc(v.cap)}t・${esc(v.year)}年・${v.hours.toLocaleString()}h・${esc(v.source||'-')}</span></div><div style="text-align:right"><div style="font-weight:700">${fmt(v.price)}</div><div style="font-size:10px;opacity:.6;color:${c}">類似度 ${Math.round(v.score*100)}%</div></div></div>`; }).join('');
       const mPrices=r.msim.map(v=>v.price), mAvg=Math.round(mPrices.reduce((a,b)=>a+b,0)/mPrices.length);
       const mUpd=localStorage.getItem(MARKET_UPDATED_KEY)||'2026年6月';
-      marketH=`<div class="panel"><div class="panel-title">🌐 市場相場参考（同一メーカー・${r.msim.length}件）<span style="font-size:10px;opacity:.6;margin-left:6px">更新：${mUpd}</span></div>${mrs}<div style="margin-top:8px;font-size:11px;opacity:.75;border-top:1px solid rgba(255,255,255,.15);padding-top:7px">市場平均価格：<b>${fmt(mAvg)}</b>　自社推奨：<b>${fmt(r.rec)}</b>　差額：${r.rec>mAvg?'+':''}${fmt(r.rec-mAvg)}</div></div>`;
+      marketH=`<div class="panel"><div class="panel-title">🌐 市場相場参考（${r.msimScope==='model'?'同一型式':'同一メーカー'}・${r.msim.length}件）<span style="font-size:10px;opacity:.6;margin-left:6px">更新：${mUpd}</span></div>${mrs}<div style="margin-top:8px;font-size:11px;opacity:.75;border-top:1px solid rgba(255,255,255,.15);padding-top:7px">市場平均価格：<b>${fmt(mAvg)}</b>　自社推奨：<b>${fmt(r.rec)}</b>　差額：${r.rec>mAvg?'+':''}${fmt(r.rec-mAvg)}</div></div>`;
     }
 
     // AIアドバイスパネル
@@ -1989,10 +2088,13 @@ function showResult(){
 
     const alH=r.an.map(a=>`<div class="alert ${a.level==='error'?'alert-error':'alert-warn'}">${a.msg}</div>`).join('');
     const w=document.createElement('div'); w.className='msg bot'; w.style.maxWidth='99%'; w.style.width='100%';
+    const attachBannerS = r.rareAttach ? `<div class="alert alert-warn" style="margin-bottom:8px">🔧 <b>希少アタッチメント（${esc(ansLabel.attachment||ans.attachment)}）</b>のため、粗利を通常の <b>${r.attachMult}倍</b>に設定して高めにしています（通常設定なら目安 <b>${fmt(r.recBeforeAttach)}</b>）。</div>` : '';
+    const nonRunBannerS = r.nonRunning ? `<div class="alert alert-warn" style="margin-bottom:8px">🚧 <b>不動車（自走不可・現状渡し）</b>のため、走行可能な場合の目安 <b>${fmt(r.recRunning)}</b> から <b>${r.nonRunRisk}%</b> 引いた価格です（買い手が修理とリスクを負担）。整備して走行可能にしてから販売する場合は走行可価格が目安です。</div>` : '';
     w.innerHTML=`<div class="avatar">🤖</div><div class="result-wrap"><div class="result-card">
-      <div class="price-label">推奨販売価格</div>
+      ${attachBannerS}${nonRunBannerS}
+      <div class="price-label">推奨販売価格${r.nonRunning?'（不動車・現状渡し）':''}</div>
       <div class="price-main">${fmt(r.rec)}</div>
-      <div class="price-sub">${ansLabel.maker}　${ansLabel.forkType}　${ansLabel.capacity}　${ansLabel.fuel}${ans.modelNum?'　型式：'+ans.modelNum:''}<br>コンディション：${r.cond.label}　粗利率：約 ${r.mg}%${r.rc>1?'　<span style="opacity:.8">（リーチ補正 +5%）</span>':''}</div>
+      <div class="price-sub">${esc(ansLabel.maker)}　${esc(ansLabel.forkType)}　${esc(ansLabel.capacity)}　${esc(ansLabel.fuel)}${ans.modelNum?'　型式：'+esc(ans.modelNum):''}　${esc(ansLabel.mobility||'')}${ans.attachment&&ans.attachment!=='標準（フォーク）'?'　'+esc(ans.attachment):''}<br>コンディション：${r.cond.label}　粗利率：約 ${r.mg}%${r.rc>1?'　<span style="opacity:.8">（リーチ補正 +5%）</span>':''}</div>
       ${alH}${simH}${marketH}${advH}
       <div class="panel"><div class="panel-title">🔢 算定根拠（${r.wl}）</div>
         ${r.sb!==null?`<div class="p-row"><span>自社在庫ベース</span><span>${fmt(r.sb)}</span></div>`:''}
@@ -2009,7 +2111,7 @@ function showResult(){
         <div class="p-row"><span>下限（最低ライン）</span><span>${fmt(r.floor)}</span></div>
         <div class="p-row emph"><span>提示レンジ</span><span>${fmt(r.rL)} 〜 ${fmt(r.rH)}</span></div>
       </div>
-      <button class="restart-btn" onclick="location.reload()">🔄 別の車両を算定する</button>
+      <button class="restart-btn" onclick="startFlow(false)">🔄 別の車両を算定する</button>
     </div></div>`;
     chat.appendChild(w); scrollBottom();
   },1500);
