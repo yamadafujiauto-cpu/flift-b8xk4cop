@@ -1896,12 +1896,24 @@ function getAuctionSimilar(cap) {
   if (sameSeries.length >= 3)        { pool = sameSeries;   scope = 'model'; }
   else if (sameMakerArr.length >= 3) { pool = sameMakerArr; scope = 'maker'; }
   else                               { pool = base;         scope = 'all';   }
-  const list = pool.map(v => {
+  const scoreItem = v => {
     const capScore  = Math.max(0, 1 - Math.abs(v.cap-cap)/(cap*0.5));
     const yearScore = ans.year  ? Math.max(0, 1 - Math.abs(v.year-ans.year)/5) : 0.5;
     const hourScore = ans.hours ? Math.max(0, 1 - Math.abs(v.hours-ans.hours)/10000) : 0.5;
     return { ...v, score: capScore*0.5+yearScore*0.25+hourScore*0.25 };
-  }).filter(v=>v.score>0.2).sort((a,b)=>b.score-a.score).slice(0,10);
+  };
+  let list = pool.map(scoreItem).filter(v=>v.score>0.2).sort((a,b)=>b.score-a.score).slice(0,10);
+  // 10件未満なら、より広いプールで補完（同一型式→同一メーカー→全メーカー）
+  if (list.length < 10) {
+    const wider = scope === 'model' ? sameMakerArr : scope === 'maker' ? base : null;
+    if (wider) {
+      const used = new Set(list.map(v => `${v.maker}|${v.model}|${v.year}|${v.hours}|${v.price}`));
+      const extra = wider.map(scoreItem)
+        .filter(v => v.score > 0.1 && !used.has(`${v.maker}|${v.model}|${v.year}|${v.hours}|${v.price}`))
+        .sort((a,b) => b.score - a.score);
+      list = [...list, ...extra].slice(0, 10);
+    }
+  }
   list.scope = scope;
   list.sameMaker = (scope !== 'all');
   return list;
@@ -1988,7 +2000,15 @@ function showKaitoriResult() {
     const scopeNote = r.scope==='all' ? '<br><span style="color:#fbbf24">※同一メーカーの実績が少ないため全メーカーで参考表示</span>'
                     : (r.scope==='maker' && modelSeriesKey(ans.modelNum)) ? '<br><span style="color:#fbbf24">※同一型式の実績が少ないため同一メーカーで参考表示</span>'
                     : '';
-    aucH = `<div class="panel"><div class="panel-title">🔨 類似オークション落札実績（直近1年・${esc(typeLabel)}・${esc(fuelLabel)}・${scope}・${auc.length}件）</div>${rows}<div style="margin-top:8px;font-size:11px;opacity:.75;border-top:1px solid rgba(255,255,255,.15);padding-top:7px">落札平均：<b>${fmt(aucAvg)}</b>${scopeNote}</div></div>`;
+    const aucId = 'auc-' + Date.now();
+    aucH = `<div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleAucRows('${aucId}')">
+        <div class="panel-title" style="margin-bottom:0">🔨 類似オークション落札実績（直近1年・${esc(typeLabel)}・${esc(fuelLabel)}・${scope}・${auc.length}件）</div>
+        <span id="${aucId}-btn" style="font-size:10px;background:rgba(255,255,255,.2);padding:2px 8px;border-radius:10px;white-space:nowrap;flex-shrink:0;margin-left:8px">▼ 明細</span>
+      </div>
+      <div style="margin-top:6px;font-size:11px;opacity:.75">落札平均：<b>${fmt(aucAvg)}</b>${scopeNote}</div>
+      <div id="${aucId}" style="display:none;margin-top:6px;border-top:1px solid rgba(255,255,255,.15);padding-top:6px">${rows}</div>
+    </div>`;
   } else {
     aucH = `<div class="alert alert-info">ℹ️ この条件（${esc(typeLabel)}・${esc(fuelLabel)}・${esc(makerLabel)}）に合う直近1年のオークション実績がありません。<br>市場販売価格（${r.mkt.length}件）から推定値を算出しています。新しい会場CSVを取り込むと精度が上がります。</div>`;
   }
@@ -2033,6 +2053,15 @@ function showKaitoriResult() {
     <button class="restart-btn" onclick="startFlow(true)">🔄 別の車両を査定する</button>
   </div></div>`;
   chat.appendChild(w); scrollBottom();
+}
+
+function toggleAucRows(id) {
+  const el = document.getElementById(id);
+  const btn = document.getElementById(id + '-btn');
+  if (!el) return;
+  const open = el.style.display === 'none';
+  el.style.display = open ? '' : 'none';
+  if (btn) btn.textContent = open ? '▲ 閉じる' : '▼ 明細';
 }
 
 // ══════════════════════════════════════════════════════════
