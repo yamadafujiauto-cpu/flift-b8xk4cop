@@ -1353,7 +1353,7 @@ function today() {
 const PHASE1_SECTIONS = [
   { title:'車両情報', fields:[
     { key:'maker',    label:'メーカー',  options:['トヨタ','コマツ','ニチユ','住友','ユニキャリア','三菱','BYD','その他'] },
-    { key:'fuel',     label:'燃料種別',  options:['LPG','ガソリン','ディーゼル','電動（バッテリー）'] },
+    { key:'fuel',     label:'燃料種別',  options:['LPG','ガソリン','ガソリン・LPG併用','ディーゼル','電動（バッテリー）'] },
     { key:'forkType', label:'車両タイプ', options:['カウンター（バランス型）','リーチ（リーチフォーク）'] },
     { key:'modelNum', label:'型式', type:'text', placeholder:'例：8FB15（不明の場合は空欄でも可）', optional:true },
     { key:'capacity', label:'積載能力',  options:['1.0t以下','1.5t','2.0t','2.5t','3.0t','3.5t以上'] },
@@ -1549,7 +1549,7 @@ function renderP2(){
 function getCapNum(){ return {'1.0t以下':.9,'1.5t':1.5,'2.0t':2,'2.5t':2.5,'3.0t':3,'3.5t以上':3.5}[ans.capacity]||1.5; }
 function getFuelGroup(){ return ans.fuel==='電動（バッテリー）'?'電動':'エンジン'; }
 // 買取マッチング用：細かい燃料／リーチ・カウンター区分／メーカー名寄せ
-function getFuelFine(){ const f=ans.fuel||''; if(/電動|バッテリー|電気/.test(f))return'電動'; if(/ディーゼル/.test(f))return'ディーゼル'; if(/ガソリン/.test(f))return'ガソリン'; if(/LPG/i.test(f))return'LPG'; return'電動'; }
+function getFuelFine(){ const f=ans.fuel||''; if(/電動|バッテリー|電気/.test(f))return'電動'; if(/ディーゼル/.test(f))return'ディーゼル'; if(/併用|bi-?fuel/i.test(f))return'併用'; if(/ガソリン/.test(f))return'ガソリン'; if(/LPG/i.test(f))return'LPG'; return'電動'; }
 function getForkType(){ return /リーチ/.test(ans.forkType||'') ? 'リーチ' : 'カウンター'; }
 function makerKey(s){ s=(s||'').replace(/[\s　]/g,''); if(/トヨタ|TOYOTA|豊田/i.test(s))return'toyota'; if(/コマツ|KOMATSU|小松/i.test(s))return'komatsu'; if(/ニチユ|NICHIYU/i.test(s))return'nichiyu'; if(/スミトモ|住友|SUMITOMO/i.test(s))return'sumitomo'; if(/ユニキャリア|UNICARRIERS|日産|ニッサン|NISSAN|TCM/i.test(s))return'unicarriers'; if(/三菱|ミツビシ|MITSUBISHI/i.test(s))return'mitsubishi'; if(/BYD/i.test(s))return'byd'; return s.toLowerCase(); }
 function recType(v){ if(v.type)return v.type; return /リーチ|reach|FBR|RFTL|FBRM/i.test(v.model||'')?'リーチ':'カウンター'; }
@@ -1884,7 +1884,11 @@ function getAuctionSimilar(cap) {
   const wantFuel = getFuelFine(), wantType = getForkType(), wantMaker = makerKey(ans.maker);
   const base = auctionData.filter(v => {
     if (v.date && new Date(v.date) < cutoff) return false;   // 直近1年のみ
-    if (recFuel(v) !== wantFuel) return false;               // 燃料一致（電動/ガソリン/ディーゼル/LPG）
+    // 燃料一致（電動/ガソリン/ディーゼル/LPG）。併用車はガソリン／LPG両方の実績を母集団にする
+    const fuelOk = wantFuel === '併用'
+      ? (recFuel(v) === 'ガソリン' || recFuel(v) === 'LPG')
+      : recFuel(v) === wantFuel;
+    if (!fuelOk) return false;
     if (recType(v) !== wantType) return false;               // リーチ／カウンター一致
     return Math.abs(v.cap - cap) <= cap * 0.4;               // 積載が近い
   });
